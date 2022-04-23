@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "squids"
+version = "0.1.0"
+description = ""
+authors = ["Ryan Siemens <ryan.siemens@zapier.com>"]
+license = "MIT"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+boto3 = "^1.21.45"
+
+[tool.poetry.dev-dependencies]
+localstack = "^0.14.2"
+pudb = "^2022.1.1"
+black = "^22.3.0"
+isort = "^5.10.1"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
