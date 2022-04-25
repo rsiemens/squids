@@ -1,24 +1,34 @@
 import inspect
 import json
+import logging
 import os
+import sys
 import time
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 from signal import SIG_IGN, SIGINT, SIGTERM, signal
-from uuid import uuid4
 
 import boto3
 
+logger = logging.getLogger("squidslog")
+logger.addHandler(logging.StreamHandler(stream=sys.stdout))
+logger.setLevel(logging.INFO)
+
 
 class App:
-    def __init__(self, name):
+    def __init__(self, name, config=None):
+        """
+        :param name: name for the app
+        :param config: Dict of kwargs from https://boto3.amazonaws.com/v1/documentation/api/latest/reference/core/session.html#boto3.session.Session.resource
+        """
+        config = config or {}
         self.name = name
-        self.sqs = boto3.resource("sqs", endpoint_url=os.getenv("AWS_ENDPOINT_URL"))
+        self.sqs = boto3.resource("sqs", **config)
         self._tasks = {}
-        self._pre_task = lambda *args, **kwargs: None
-        self._post_task = lambda *args, **kwargs: None
-        self._pre_send = lambda *args, **kwargs: None
-        self._post_send = lambda *args, **kwargs: None
+        self._pre_task = None
+        self._post_task = None
+        self._pre_send = None
+        self._post_send = None
 
     def task(self, queue_name):
         def wrapper(func):
@@ -71,19 +81,23 @@ class Task:
         queue = self.app.sqs.get_queue_by_name(QueueName=self.queue_name)
         # will raise TypeError if the signature doesn't match
         bound = self.signature.bind(*args, **kwargs)
-        task_id = str(uuid4())
         body = json.dumps(
             {
                 "task": self.name,
                 "args": bound.args,
                 "kwargs": bound.kwargs,
-                "task_id": task_id,
             }
         )
-        self.app._pre_send(self.queue_name, body)
+
+        if self.app._pre_send is not None:
+            self.app._pre_send(self.queue_name, body)
+
         response = queue.send_message(MessageBody=body)
-        self.app._post_send(self.queue_name, body, response)
-        return task_id
+
+        if self.app._post_send is not None:
+            self.app._post_send(self.queue_name, body, response)
+
+        return response
 
     def run(self, *args, **kwargs):
         if self.func is not None:
@@ -96,12 +110,16 @@ class Task:
         state.pop("app")
         return state
 
-    def __call__(self, task_id, *args, **kwargs):
-        self.id = task_id
+    def __call__(self, message_id, *args, **kwargs):
+        self.id = message_id
 
-        self.pre_task(self)
+        if self.pre_task is not None:
+            self.pre_task(self)
+
         result = self.run(*args, **kwargs)
-        self.post_task(self)
+
+        if self.post_task is not None:
+            self.post_task(self)
 
         return result
 
@@ -135,16 +153,31 @@ class TrackedResource:
         return self.available_space() > 0
 
 
-def done_callback(future_tracker, message, future):
+def done_callback(future_tracker, task_name, queue_name, message, future):
     # this runs in the main loop process
     try:
         future.result()
-    except Exception as e:
-        print(f"Task failed with {e}")
+    except Exception:
+        logger.exception(
+            "Task failed",
+            extra={
+                "message_id": message.message_id,
+                "task": task_name,
+                "queue": queue_name,
+            },
+        )
     else:
         # Q: is it ok to be doing these deletes in the main process instead of workers,
         #    or is the latency from this going to cause to much blocking?
         message.delete()
+        logger.info(
+            f"Completed task: {task_name}[{message.message_id}]",
+            extra={
+                "message_id": message.message_id,
+                "task": task_name,
+                "queue": queue_name,
+            },
+        )
     finally:
         future_tracker.remove(future)
 
@@ -172,12 +205,27 @@ def run_loop(app, queue_name, n_workers):
                 for message in messages:
                     body = json.loads(message.body)
                     task = app._tasks[body["task"]]
+
+                    logger.info(
+                        f"Received task: {task.name}[{message.message_id}]",
+                        extra={
+                            "message_id": message.message_id,
+                            "task": task.name,
+                            "queue": queue_name,
+                        },
+                    )
                     future = executor.submit(
-                        task, body["task_id"], *body["args"], **body["kwargs"]
+                        task, message.message_id, *body["args"], **body["kwargs"]
                     )
                     future_tracker.add(future)
                     future.add_done_callback(
-                        partial(done_callback, future_tracker, message)
+                        partial(
+                            done_callback,
+                            future_tracker,
+                            task.name,
+                            queue_name,
+                            message,
+                        )
                     )
             else:
                 time.sleep(0.1)
