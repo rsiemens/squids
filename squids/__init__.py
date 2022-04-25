@@ -4,7 +4,7 @@ import os
 import time
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
-from signal import SIGINT, SIGTERM, signal
+from signal import SIG_IGN, SIGINT, SIGTERM, signal
 from uuid import uuid4
 
 import boto3
@@ -142,9 +142,16 @@ def done_callback(future_tracker, message, future):
     except Exception as e:
         print(f"Task failed with {e}")
     else:
+        # Q: is it ok to be doing these deletes in the main process instead of workers,
+        #    or is the latency from this going to cause to much blocking?
         message.delete()
     finally:
         future_tracker.remove(future)
+
+
+def initializer():
+    # Handles issue where KeyboardInterrupt isn't handled properly in child processes.
+    signal(SIGINT, SIG_IGN)
 
 
 def run_loop(app, queue_name, n_workers):
@@ -153,7 +160,9 @@ def run_loop(app, queue_name, n_workers):
     sqs = boto3.resource("sqs", endpoint_url=os.getenv("AWS_ENDPOINT_URL"))
     queue = sqs.get_queue_by_name(QueueName=queue_name)
 
-    with ProcessPoolExecutor(max_workers=n_workers) as executor:
+    with ProcessPoolExecutor(
+        max_workers=n_workers, initializer=initializer
+    ) as executor:
         while not exit_handler.should_exit:
             if future_tracker.has_available_space:
                 messages = queue.receive_messages(
