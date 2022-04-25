@@ -1,6 +1,7 @@
 import argparse
 import importlib
 import os
+import sys
 
 from squids import run_loop
 
@@ -44,10 +45,24 @@ def import_app(import_path):
 
 
 def run(args):
-    print(f"Workers {args.workers}")
-    print(f"Processing queue {args.queue}")
-
     app = import_app(args.app)
+    print(
+        "[config]\n"
+        f"  app = {app.name}\n"
+        f"  queue = {args.queue}\n"
+        f"  workers = {args.workers}\n"
+    )
+
+    task_names = [n for n, t in app._tasks.items() if t.queue_name == args.queue]
+
+    if not task_names:
+        print(f'No tasks registered for queue "{args.queue}"', file=sys.stderr)
+        return
+
+    print("[tasks]")
+    for name in task_names:
+        print(f"  - {name}")
+
     run_loop(app, args.queue, args.workers)
 
 
