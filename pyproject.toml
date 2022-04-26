@@ -2,7 +2,7 @@
 name = "squids"
 version = "0.1.0"
 description = ""
-authors = ["Ryan Siemens <ryan.siemens@zapier.com>"]
+authors = ["Ryan Siemens <ryanjsiemens@gmail.com>"]
 license = "MIT"
 
 [tool.poetry.dependencies]
