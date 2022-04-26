@@ -3,27 +3,27 @@ import random
 import os
 from squids import App, Task
 
-app = App('test')
+app = App('test', config={'endpoint_url': 'http://localhost:4566'})
 
 
 @app.pre_send
 def before_send(queue: str, body: str):
-    print(f"Sending {body} to {queue}")
+    print("Running before send hook")
 
 
 @app.post_send
 def after_send(queue: str, body: str, response: dict):
-    print(f"Got response {response}")
+    print("Running after send hook")
 
 
 @app.pre_task
 def before_task(task: Task):
-    print(f'(pid: {os.getpid()}) Before task {task.name}({task.id})')
+    print("Running before task hook")
 
 
 @app.post_task
 def after_task(task: Task):
-    print(f'After task {task.name}({task.id})')
+    print("Running after task hook")
 
 
 @app.task(queue_name='test-queue')

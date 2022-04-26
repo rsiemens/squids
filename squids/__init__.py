@@ -35,9 +35,9 @@ class App:
             task = Task(
                 queue_name,
                 func,
+                self,
                 pre_task=self._pre_task,
                 post_task=self._post_task,
-                app=self,
             )
             self._tasks[func.__name__] = task
             # We need to return func to get around some pickling issues where pickle
@@ -66,12 +66,14 @@ class App:
 
 
 class Task:
-    def __init__(self, queue_name, func, pre_task, post_task, app=None):
+    def __init__(self, queue_name, func, app, pre_task=None, post_task=None):
         self.queue_name = queue_name
         self.name = func.__name__
         self.func = func
         self.pre_task = pre_task
         self.post_task = post_task
+        # NB: This isn't available on the consumer side because of pickling.
+        #  see the note in __getstate__
         self.app = app
         self.signature = inspect.signature(func)
         # set on the consumer side via __call__
@@ -81,18 +83,16 @@ class Task:
         queue = self.app.sqs.get_queue_by_name(QueueName=self.queue_name)
         # will raise TypeError if the signature doesn't match
         bound = self.signature.bind(*args, **kwargs)
-        body = json.dumps(
-            {
-                "task": self.name,
-                "args": bound.args,
-                "kwargs": bound.kwargs,
-            }
-        )
+        body = {
+            "task": self.name,
+            "args": bound.args,
+            "kwargs": bound.kwargs,
+        }
 
         if self.app._pre_send is not None:
             self.app._pre_send(self.queue_name, body)
 
-        response = queue.send_message(MessageBody=body)
+        response = queue.send_message(MessageBody=json.dumps(body))
 
         if self.app._post_send is not None:
             self.app._post_send(self.queue_name, body, response)

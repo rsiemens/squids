@@ -9,12 +9,26 @@
 5. Start sending tasks:
 
 ```python
-In [1]: from tasks import printer, long_running_email_task
-
 In [2]: long_running_email_task.send(to_addr='foo@domain.com', from_addr='bar@domain.com', body='Hello World!')
-Sending {"task": "long_running_email_task", "args": ["foo@domain.com", "bar@domain.com", "Hello World!"], "kwargs": {}, "task_id": "40c2436c-7e4f-4627-8a04-08128d8e80a4"} to test-queue
-Got response {'MD5OfMessageBody': '2f9077b514b1f459bf6a492abaed0945', 'MessageId': '78ad34db-abae-ec91-c236-b3d5db2e3627', 'ResponseMetadata': {'RequestId': '6ADEAZLN4EFY0UBW5JOR2KA0RI7VWJ0D9CN4O5H6R7E1Z33NADHM', 'HTTPStatusCode': 200, 'HTTPHeaders': {'content-type': 'text/html; charset=utf-8', 'content-length': '322', 'x-amzn-requestid': '6ADEAZLN4EFY0UBW5JOR2KA0RI7VWJ0D9CN4O5H6R7E1Z33NADHM', 'x-amz-crc32': '3277104638', 'access-control-allow-origin': '*', 'access-control-allow-methods': 'HEAD,GET,PUT,POST,DELETE,OPTIONS,PATCH', 'access-control-allow-headers': 'authorization,cache-control,content-length,content-md5,content-type,etag,location,x-amz-acl,x-amz-content-sha256,x-amz-date,x-amz-request-id,x-amz-security-token,x-amz-tagging,x-amz-target,x-amz-user-agent,x-amz-version-id,x-amzn-requestid,x-localstack-target,amz-sdk-invocation-id,amz-sdk-request', 'access-control-expose-headers': 'etag,x-amz-version-id', 'connection': 'close', 'date': 'Mon, 25 Apr 2022 17:45:23 GMT', 'server': 'hypercorn-h11'}, 'RetryAttempts': 0}}
-Out[2]: '40c2436c-7e4f-4627-8a04-08128d8e80a4'
+Running before send hook
+Running after send hook
+Out[2]:
+{'MD5OfMessageBody': '4c65b04b14441852f8285b27b864d54e',
+ 'MessageId': '5c52797e-ce8c-ddd2-58e2-b7c9e0e4b026',
+ 'ResponseMetadata': {'RequestId': '3PXDRKUSE6U3G58DH7LN4R78VFBYALI9PWSEKPK8ATFOZAEVKEG3',
+  'HTTPStatusCode': 200,
+  'HTTPHeaders': {'content-type': 'text/html; charset=utf-8',
+   'content-length': '322',
+   'x-amzn-requestid': '3PXDRKUSE6U3G58DH7LN4R78VFBYALI9PWSEKPK8ATFOZAEVKEG3',
+   'x-amz-crc32': '1145979214',
+   'access-control-allow-origin': '*',
+   'access-control-allow-methods': 'HEAD,GET,PUT,POST,DELETE,OPTIONS,PATCH',
+   'access-control-allow-headers': 'authorization,cache-control,content-length,content-md5,content-type,etag,location,x-amz-acl,x-amz-content-sha256,x-amz-date,x-amz-request-id,x-amz-security-token,x-amz-tagging,x-amz-target,x-amz-user-agent,x-amz-version-id,x-amzn-requestid,x-localstack-target,amz-sdk-invocation-id,amz-sdk-request',
+   'access-control-expose-headers': 'etag,x-amz-version-id',
+   'connection': 'close',
+   'date': 'Tue, 26 Apr 2022 03:43:54 GMT',
+   'server': 'hypercorn-h11'},
+  'RetryAttempts': 0}}
 ```
 
 
