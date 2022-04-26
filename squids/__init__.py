@@ -33,13 +33,13 @@ class App:
     def task(self, queue_name):
         def wrapper(func):
             task = Task(
-                queue_name,
-                func,
                 self,
+                queue_name,
+                func=func,
                 pre_task=self._pre_task,
                 post_task=self._post_task,
             )
-            self._tasks[func.__name__] = task
+            self._tasks[task.name] = task
             # We need to return func to get around some pickling issues where pickle
             # will need to see the original function.
             # https://stackoverflow.com/questions/52185507/pickle-and-decorated-classes-picklingerror-not-the-same-object
@@ -47,6 +47,15 @@ class App:
             return func
 
         return wrapper
+
+    def add_task(self, task_cls):
+        task = task_cls(
+            self,
+            task_cls.queue_name,
+            pre_task=self._pre_task,
+            post_task=self._post_task,
+        )
+        self._tasks[task.name] = task
 
     def pre_task(self, func):
         self._pre_task = func
@@ -66,16 +75,19 @@ class App:
 
 
 class Task:
-    def __init__(self, queue_name, func, app, pre_task=None, post_task=None):
+    def __init__(self, app, queue_name=None, func=None, pre_task=None, post_task=None):
         self.queue_name = queue_name
-        self.name = func.__name__
+        if func:
+            self.name = f"{func.__module__}.{func.__qualname__}"
+        else:
+            self.name = f"{self.__class__.__module__}.{self.__class__.__qualname__}"
         self.func = func
         self.pre_task = pre_task
         self.post_task = post_task
         # NB: This isn't available on the consumer side because of pickling.
         #  see the note in __getstate__
         self.app = app
-        self.signature = inspect.signature(func)
+        self.signature = inspect.signature(func if func else self.run)
         # set on the consumer side via __call__
         self.id = None
 

@@ -17,13 +17,38 @@ class AppTestCases(unittest.TestCase):
         def test_task():
             pass
 
-        self.assertIn("test_task", app._tasks)
-        task = app._tasks["test_task"]
+        self.assertIn(
+            "tests.test_app.AppTestCases.test_task.<locals>.test_task", app._tasks
+        )
+        task = app._tasks["tests.test_app.AppTestCases.test_task.<locals>.test_task"]
         self.assertIsInstance(task, Task)
-        self.assertEqual(task.name, "test_task")
+        self.assertEqual(
+            task.name, "tests.test_app.AppTestCases.test_task.<locals>.test_task"
+        )
         self.assertEqual(task.queue_name, "test-queue")
         self.assertEqual(task.func, test_task)
         self.assertEqual(task.send, test_task.send)
+
+    def test_add_task(self, _):
+        app = App("unittests")
+
+        class MyTask(Task):
+            queue_name = "test-queue"
+
+            def run(self, arg1, arg2):
+                pass
+
+        app.add_task(MyTask)
+        self.assertIn(
+            "tests.test_app.AppTestCases.test_add_task.<locals>.MyTask", app._tasks
+        )
+        task = app._tasks["tests.test_app.AppTestCases.test_add_task.<locals>.MyTask"]
+        self.assertIsInstance(task, MyTask)
+        self.assertEqual(
+            task.name, "tests.test_app.AppTestCases.test_add_task.<locals>.MyTask"
+        )
+        self.assertEqual(task.queue_name, "test-queue")
+        self.assertEqual(task.func, None)
 
     def test_pre_task(self, _):
         app = App("unittests")

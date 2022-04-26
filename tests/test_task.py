@@ -20,7 +20,7 @@ class TaskTestCases(unittest.TestCase):
         def dummy_job(arg1, kwarg1=None):
             self.fail("dummy_job shouldn't be called on `send`")
 
-        task = Task("test-queue", dummy_job, app=app)
+        task = Task(app, "test-queue", func=dummy_job)
         with self.assertRaises(TypeError):
             # validates the `send` arguments match the `dummy_job` parameters
             task.send(kwarg1="kwarg1")
@@ -29,7 +29,7 @@ class TaskTestCases(unittest.TestCase):
         mock_queue.send_message.assert_called_once_with(
             MessageBody=json.dumps(
                 {
-                    "task": "dummy_job",
+                    "task": "tests.test_task.TaskTestCases.test_send.<locals>.dummy_job",
                     "args": ["arg1val", "kwarg1val"],
                     "kwargs": {},
                 }
@@ -40,7 +40,7 @@ class TaskTestCases(unittest.TestCase):
         app = App("unittests")
         hook_call_order = []
         expected_body = {
-            "task": "dummy_job",
+            "task": "tests.test_task.TaskTestCases.test_send_with_pre_and_post_hooks.<locals>.dummy_job",
             "args": (),
             "kwargs": {},
         }
@@ -63,7 +63,7 @@ class TaskTestCases(unittest.TestCase):
         def dummy_job():
             self.fail("dummy_job shouldn't be called on `send`")
 
-        task = Task("test-queue", dummy_job, app=app)
+        task = Task(app, "test-queue", func=dummy_job)
         task.send()
 
         self.assertEqual(hook_call_order, ["pre_send", "post_send"])
@@ -76,7 +76,7 @@ class TaskTestCases(unittest.TestCase):
             nonlocal dummy_job_called
             dummy_job_called = True
 
-        task = Task("test-queue", dummy_job, app=app)
+        task = Task(app, "test-queue", func=dummy_job)
         task.run()
 
         self.assertTrue(dummy_job_called)
@@ -84,7 +84,7 @@ class TaskTestCases(unittest.TestCase):
     def test_pickle_task(self, _):
         app = App("unittests")
 
-        task = Task("test-queue", dummy_task, app=app)
+        task = Task(app, "test-queue", func=dummy_task)
         unpickled_task = pickle.loads(pickle.dumps(task))
 
         self.assertEqual(task.app, app)
@@ -112,8 +112,35 @@ class TaskTestCases(unittest.TestCase):
             self.assertEqual(task.id, message_id)
 
         task = Task(
-            "test-queue", dummy_job, app, pre_task=before_task, post_task=after_task
+            app,
+            "test-queue",
+            func=dummy_job,
+            pre_task=before_task,
+            post_task=after_task,
         )
         task(message_id)
 
         self.assertEqual(hook_call_order, ["pre_task", "dummy_job", "post_task"])
+
+    def test_custom_task_class(self, _):
+        app = App("unittests")
+        run_called = False
+
+        class MyTask(Task):
+            def run(self, arg1, kwarg1=None):
+                nonlocal run_called
+                run_called = True
+
+        task = MyTask(app, "test-queue")
+        self.assertEqual(
+            task.name,
+            "tests.test_task.TaskTestCases.test_custom_task_class.<locals>.MyTask",
+        )
+
+        with self.assertRaises(TypeError):
+            task.send(kwarg1="kwarg1")
+
+        task.send("arg1", kwarg1="kwarg1")
+        task("messageid-123", "arg1", kwarg1="kwarg1")
+
+        self.assertTrue(run_called)
