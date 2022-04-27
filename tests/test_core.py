@@ -6,11 +6,93 @@ from unittest.mock import Mock, patch
 from squids import App, Task
 
 
+@patch("squids.core.boto3")
+class AppTestCases(unittest.TestCase):
+    def test_init(self, _):
+        app = App("unittests")
+        self.assertEqual(app.name, "unittests")
+
+    def test_task(self, _):
+        app = App("unittests")
+
+        @app.task("test-queue")
+        def test_task():
+            pass
+
+        self.assertIn(
+            "tests.test_core.AppTestCases.test_task.<locals>.test_task", app._tasks
+        )
+        task = app._tasks["tests.test_core.AppTestCases.test_task.<locals>.test_task"]
+        self.assertIsInstance(task, Task)
+        self.assertEqual(
+            task.name, "tests.test_core.AppTestCases.test_task.<locals>.test_task"
+        )
+        self.assertEqual(task.queue, "test-queue")
+        self.assertEqual(task.func, test_task)
+        self.assertEqual(task.send, test_task.send)
+
+    def test_add_task(self, _):
+        app = App("unittests")
+
+        class MyTask(Task):
+            queue = "test-queue"
+
+            def run(self, arg1, arg2):
+                pass
+
+        task = app.add_task(MyTask)
+        self.assertIn(
+            "tests.test_core.AppTestCases.test_add_task.<locals>.MyTask", app._tasks
+        )
+        self.assertIsInstance(task, MyTask)
+        self.assertEqual(
+            task.name, "tests.test_core.AppTestCases.test_add_task.<locals>.MyTask"
+        )
+        self.assertEqual(task.queue, "test-queue")
+        self.assertEqual(task.func, None)
+
+    def test_pre_task(self, _):
+        app = App("unittests")
+
+        @app.pre_task
+        def before_task(task):
+            pass
+
+        self.assertEqual(app._pre_task, before_task)
+
+    def test_post_task(self, _):
+        app = App("unittests")
+
+        @app.post_task
+        def after_task(task):
+            pass
+
+        self.assertEqual(app._post_task, after_task)
+
+    def test_pre_send(self, _):
+        app = App("unittests")
+
+        @app.pre_send
+        def before_send(queue, body):
+            pass
+
+        self.assertEqual(app._pre_send, before_send)
+
+    def test_post_send(self, _):
+        app = App("unittests")
+
+        @app.post_send
+        def after_send(queue, body, response):
+            pass
+
+        self.assertEqual(app._post_send, after_send)
+
+
 def dummy_task():
     pass
 
 
-@patch("squids.boto3")
+@patch("squids.core.boto3")
 class TaskTestCases(unittest.TestCase):
     def test_send(self, _):
         app = App("unittests")
@@ -29,7 +111,7 @@ class TaskTestCases(unittest.TestCase):
         mock_queue.send_message.assert_called_once_with(
             MessageBody=json.dumps(
                 {
-                    "task": "tests.test_task.TaskTestCases.test_send.<locals>.dummy_job",
+                    "task": "tests.test_core.TaskTestCases.test_send.<locals>.dummy_job",
                     "args": ["arg1val", "kwarg1val"],
                     "kwargs": {},
                 }
@@ -40,7 +122,7 @@ class TaskTestCases(unittest.TestCase):
         app = App("unittests")
         hook_call_order = []
         expected_body = {
-            "task": "tests.test_task.TaskTestCases.test_send_with_pre_and_post_hooks.<locals>.dummy_job",
+            "task": "tests.test_core.TaskTestCases.test_send_with_pre_and_post_hooks.<locals>.dummy_job",
             "args": (),
             "kwargs": {},
         }
@@ -102,13 +184,13 @@ class TaskTestCases(unittest.TestCase):
         def before_task(task):
             hook_call_order.append("pre_task")
 
-            self.assertEqual(task.queue_name, "test-queue")
+            self.assertEqual(task.queue, "test-queue")
             self.assertEqual(task.id, message_id)
 
         def after_task(task):
             hook_call_order.append("post_task")
 
-            self.assertEqual(task.queue_name, "test-queue")
+            self.assertEqual(task.queue, "test-queue")
             self.assertEqual(task.id, message_id)
 
         task = Task(
@@ -134,7 +216,7 @@ class TaskTestCases(unittest.TestCase):
         task = MyTask(app, "test-queue")
         self.assertEqual(
             task.name,
-            "tests.test_task.TaskTestCases.test_custom_task_class.<locals>.MyTask",
+            "tests.test_core.TaskTestCases.test_custom_task_class.<locals>.MyTask",
         )
 
         with self.assertRaises(TypeError):

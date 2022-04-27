@@ -2,18 +2,64 @@ import argparse
 import importlib
 import os
 import sys
+from textwrap import dedent
 
-from squids import run_loop
+from squids.consumer import run_loop
+
+
+def banner():
+    return """\
+
+                                      .%%%:
+                                    -%%%:#%%=
+            .%%%:                  %%-%.::%+#%                  .%%%:
+          -%%%:#%%=              =%::% ::::% :%*              -%%%:#%%=
+         %%-%.::%+#%            #%.:%=:::::-% :%%            %%-%.::%+#%
+       =%::% ::::% :%*         %%::-% ::::::%-::#%         =%::% ::::% :%*
+      #%.:%=:::::-% :%%       %#:::%.::::::::% :-+%       #%.:%=:::::-% :%%
+     %%::-% ::::::%-::#%     #%.:::# ::::::::#-:::##     %%::-% ::::::%-::#%
+    %#:::%.::::::::% :-+%    % :::%.::::::::::% :::%    %#:::%.::::::::% :-+%
+   #%.:::# ::::::::#-:::##  ++ .::% ::-:::-:::% :. :#  #%.:::# ::::::::#-:::##
+   % :::%.::::::::::% :::%   %#%+*#::%#%:%%%::=%+%%%   % :::%.::::::::::% :::%
+  ++ .::% ::-:::-:::% :. :#     -% ::%.#-%.%:::#=     ++ .::% ::-:::-:::% :. :#
+   %#%+*#::%#%:%%%::=%+%%%       % ::##%:%%%:::%       %#%+*#::%#%:%%%::=%+%%%
+      -% ::%.#-%.%:::#=          #. .:::::::::.%          -% ::%.#-%.%:::#=
+       % ::##%:%%%:::%            #%*-.   .:*%%            % ::##%:%%%:::%
+       #. .:::::::::.%             .-#%%%%%#-              #. .:::::::::.%
+        #%*-.   .:*%%                                       #%*-.   .:*%%
+         .-#%%%%%#-              :%%#  %##  ##%=             .-#%%%%%#-
+                                 % :% #+:-% %::%
+       :%%#  %##  ##%=           % :%:%:::% %.:#           :%%#  %##  ##%=
+       % :% #+:-% %::%           %%#%  %#%. %%#%           % :% #+:-% %::%
+       % :%:%:::% %.:#                                     % :%:%:::% %.:#
+       %%#%  %#%. %%#%                                     %%#%  %#%. %%#%
+
+              /######   /######            /##       /##  /######
+             /##__  ## /##__  ##          |__/      | ## /##__  ##
+            | ##  \__/| ##  \ ## /##   /## /##  /#######| ##  \__/
+            |  ###### | ##  | ##| ##  | ##| ## /##__  ##|  ######
+             \____  ##| ##  | ##| ##  | ##| ##| ##  | ## \____  ##
+             /##  \ ##| ##/## ##| ##  | ##| ##| ##  | ## /##  \ ##
+            |  ######/|  ######/|  ######/| ##|  #######|  ######/
+             \______/  \____ ### \______/ |__/ \_______/ \______/
+                            \__/
+    """
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
+    # I'm not sure if I like processing many queues as long polling can kind
+    # of mess it up in terms of consumption throughput
     parser.add_argument(
-        "--queue",
+        "--queues",
         action="store",
         type=str,
-        required=True,
-        help="The name of the SQS queue to process",
+        nargs="+",
+        required=False,
+        help=(
+            'The names of the SQS queues to process: --queues "queue1 queue2 queue3". '
+            "Defaults to all queues in the app if not provided.",
+        ),
     )
     parser.add_argument(
         "--workers",
@@ -46,24 +92,31 @@ def import_app(import_path):
 
 def run(args):
     app = import_app(args.app)
+
+    if not args.queues:
+        queues = list({t.queue for t in app._tasks.values()})
+    else:
+        queues = args.queues
+
+    task_names = [n for n, t in app._tasks.items() if t.queue in queues]
+
+    print(banner())
     print(
         "[config]\n"
         f"  app = {app.name}\n"
-        f"  queue = {args.queue}\n"
+        f"  queues = {queues}\n"
         f"  workers = {args.workers}\n"
     )
 
-    task_names = [n for n, t in app._tasks.items() if t.queue_name == args.queue]
-
     if not task_names:
-        print(f'No tasks registered for queue "{args.queue}"', file=sys.stderr)
+        print(f'No tasks registered for queues "{queues}"', file=sys.stderr)
         return
 
     print("[tasks]")
     for name in task_names:
         print(f"  - {name}")
 
-    run_loop(app, args.queue, args.workers)
+    run_loop(app, queues, args.workers)
 
 
 run(parse_args())
