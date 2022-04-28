@@ -9,8 +9,43 @@ from signal import SIG_IGN, SIGINT, SIGTERM, signal
 import boto3
 
 logger = logging.getLogger("squidslog")
-logger.addHandler(logging.StreamHandler(stream=sys.stdout))
-logger.setLevel(logging.INFO)
+
+
+class Consumer:
+    def __init__(self, app, queue):
+        self.app = app
+        self.queue = queue
+
+    def _prepare_task(self, message):
+        body = json.loads(message.body)
+        task = self.app._tasks[body["task"]]
+
+        logger.info(
+            f"Received task: {task.name}[{message.message_id}]",
+            extra={
+                "message_id": message.message_id,
+                "task": task.name,
+                "queue": self.queue.url,
+            },
+        )
+        return task, message.message_id, body["args"], body["kwargs"]
+
+    def consume_messages(self, options=None):
+        if options is None:
+            options = {}
+
+        messages = self.queue.receive_messages(**options)
+        for message in messages:
+            yield message
+
+    def consume(self, options=None):
+        if options is None:
+            options = {}
+
+        for message in self.consume_messages(options):
+            task, message_id, args, kwargs = self._prepare_task(message)
+            task(message_id, *args, **kwargs)
+            message.delete()
 
 
 class ResourceLimitExceeded(Exception):
@@ -100,9 +135,9 @@ def initializer():
 def run_loop(app, queue_name, n_workers, report_interval, polling_wait_time):
     exit_handler = ExitHandler()
     future_tracker = ResourceTracker(limit=n_workers * 2)
-    sqs_resource = boto3.resource("sqs", **app.config)
     sqs_client = boto3.client("sqs", **app.config)
-    queue = sqs_resource.get_queue_by_name(QueueName=queue_name)
+    queue = app.get_queue_by_name(queue_name)
+    consumer = Consumer(app, queue)
     last_report_queue_stats = time.time()
 
     with ProcessPoolExecutor(
@@ -123,25 +158,16 @@ def run_loop(app, queue_name, n_workers, report_interval, polling_wait_time):
                 last_report_queue_stats = time.time()
 
             if future_tracker.has_available_space:
-                messages = queue.receive_messages(
-                    MaxNumberOfMessages=min(future_tracker.available_space(), 10),
-                    WaitTimeSeconds=polling_wait_time,
-                )
-                for message in messages:
-                    body = json.loads(message.body)
-                    task = app._tasks[body["task"]]
-
-                    logger.info(
-                        f"Received task: {task.name}[{message.message_id}]",
-                        extra={
-                            "message_id": message.message_id,
-                            "task": task.name,
-                            "queue": queue.url,
-                        },
-                    )
-                    future = executor.submit(
-                        task, message.message_id, *body["args"], **body["kwargs"]
-                    )
+                for message in consumer.consume_messages(
+                    options={
+                        "MaxNumberOfMessages": min(
+                            future_tracker.available_space(), 10
+                        ),
+                        "WaitTimeSeconds": polling_wait_time,
+                    }
+                ):
+                    task, message_id, args, kwargs = consumer._prepare_task(message)
+                    future = executor.submit(task, message_id, *args, **kwargs)
                     future_tracker.add(future)
                     future.add_done_callback(
                         partial(

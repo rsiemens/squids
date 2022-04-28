@@ -35,7 +35,7 @@ def after_task(task: Task):
 
 @app.task(queue='test')
 def printer(message):
-    print(f"Worker {os.getpid()} got message: {message}")
+    print(message)
 
 
 @app.task(queue='test')

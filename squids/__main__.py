@@ -134,6 +134,7 @@ def run(args):
     print("[tasks]")
     for name in task_names:
         print(f"  - {name}")
+    print()
 
     run_loop(
         app, args.queue, args.workers, args.report_interval, args.polling_wait_time

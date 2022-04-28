@@ -4,6 +4,8 @@ import json
 
 import boto3
 
+from squids.consumer import Consumer
+
 
 class App:
     def __init__(self, name, config=None):
@@ -70,9 +72,14 @@ class App:
         self._report_queue_stats = func
         return func
 
-    @functools.cache
+    @functools.lru_cache()
     def get_queue_by_name(self, queue_name):
         return self.sqs.get_queue_by_name(QueueName=queue_name)
+
+    @functools.lru_cache()
+    def get_consumer(self, queue_name):
+        queue = self.get_queue_by_name(queue_name)
+        return Consumer(self, queue)
 
 
 class Task:
