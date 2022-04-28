@@ -2,8 +2,8 @@
 
 1. `poetry install`
 2. Start up localstack `poetry run localstack start`
-3. Create a test queue `aws --endpoint-url="http://localhost:4566" sqs create-queue --queue-name test-queue`
-4. Start up the workers `poetry run python -m squids --app tasks.app` (using the test `tasks.py` module included in the repo)
+3. Create a test queue `aws --endpoint-url="http://localhost:4566" sqs create-queue --queue-name test`
+4. Start up the workers `poetry run python -m squids --queue test --app tasks.app` (using the test `tasks.py` module included in the repo)
 5. Start sending tasks in another python session:
 
 ```python
