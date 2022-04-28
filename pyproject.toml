@@ -11,7 +11,6 @@ boto3 = "^1.21.45"
 
 [tool.poetry.dev-dependencies]
 localstack = "^0.14.2"
-pudb = "^2022.1.1"
 black = "^22.3.0"
 isort = "^5.10.1"
 Sphinx = "^4.5.0"
