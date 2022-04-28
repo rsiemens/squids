@@ -6,7 +6,7 @@ authors = ["Ryan Siemens <ryanjsiemens@gmail.com>"]
 license = "MIT"
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "^3.8"
 boto3 = "^1.21.45"
 
 [tool.poetry.dev-dependencies]
