@@ -1,7 +1,6 @@
 import unittest
 
-from squids.consumer import (ResourceLimitExceeded, ResourceTracker,
-                             RoundRobinScheduler)
+from squids.consumer import ResourceLimitExceeded, ResourceTracker
 
 
 class ResourceTrackerTestCases(unittest.TestCase):
@@ -46,14 +45,3 @@ class ResourceTrackerTestCases(unittest.TestCase):
 
         tracker.add(5)
         self.assertFalse(tracker.has_available_space)
-
-
-class RoundRobinSchedulerTestCases(unittest.TestCase):
-    def test_next(self):
-        scheduler = RoundRobinScheduler(["a", "b", "c"])
-
-        self.assertEqual(scheduler.next(), "a")
-        self.assertEqual(scheduler.next(), "b")
-        self.assertEqual(scheduler.next(), "c")
-        self.assertEqual(scheduler.next(), "a")
-        self.assertEqual(scheduler.next(), "b")

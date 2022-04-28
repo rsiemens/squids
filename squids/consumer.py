@@ -1,11 +1,9 @@
 import json
 import logging
-import os
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
-from queue import Queue
 from signal import SIG_IGN, SIGINT, SIGTERM, signal
 
 import boto3
@@ -40,27 +38,29 @@ class ResourceTracker:
         return self.available_space() > 0
 
 
-class RoundRobinScheduler:
-    def __init__(self, items):
-        self._queue = Queue()
-        for item in items:
-            self._queue.put(item)
-
-    def next(self):
-        next = self._queue.get(block=False)
-        self._queue.put(next)
-        return next
-
-
 class ExitHandler:
     def __init__(self):
         self.should_exit = False
-        signal(SIGINT, self._signal_handler)
-        signal(SIGTERM, self._signal_handler)
+        self._install_soft_shutdown()
 
-    def _signal_handler(self, signal, frame):
-        logger.info(f"Received signal {signal}. Shutting down...")
+    def _install_soft_shutdown(self):
+        signal(SIGINT, self._soft_signal_handler)
+        signal(SIGTERM, self._soft_signal_handler)
+
+    def _soft_signal_handler(self, signal, frame):
+        logger.info(f"Received signal {signal}. Performing soft shutdown...")
+        logger.info(
+            f"Hit Ctrl+C again to perform a hard shutdown (will terminate all running tasks)."
+        )
         self.should_exit = True
+        self._install_hard_shutdown()
+
+    def _install_hard_shutdown(self):
+        signal(SIGINT, self._hard_signal_handler)
+        signal(SIGTERM, self._hard_signal_handler)
+
+    def _hard_signal_handler(self, signal, frame):
+        sys.exit(signal)
 
 
 def done_callback(future_tracker, task_name, queue_url, message, future):
@@ -97,22 +97,35 @@ def initializer():
     signal(SIGINT, SIG_IGN)
 
 
-def run_loop(app, queue_names, n_workers):
+def run_loop(app, queue_name, n_workers, report_interval, polling_wait_time):
     exit_handler = ExitHandler()
     future_tracker = ResourceTracker(limit=n_workers * 2)
-    sqs = boto3.resource("sqs", **app.config)
-    sqs_queues = [sqs.get_queue_by_name(QueueName=q) for q in queue_names]
-    scheduler = RoundRobinScheduler(sqs_queues)
+    sqs_resource = boto3.resource("sqs", **app.config)
+    sqs_client = boto3.client("sqs", **app.config)
+    queue = sqs_resource.get_queue_by_name(QueueName=queue_name)
+    last_report_queue_stats = time.time()
 
     with ProcessPoolExecutor(
         max_workers=n_workers, initializer=initializer
     ) as executor:
         while not exit_handler.should_exit:
+            elapsed = time.time() - last_report_queue_stats
+            if elapsed >= report_interval and app._report_queue_stats is not None:
+                logger.info(
+                    f"Reporting queue stats after {elapsed} seconds",
+                    extra={"queue": queue.url, "report_interval": report_interval},
+                )
+
+                attrs = sqs_client.get_queue_attributes(
+                    QueueUrl=queue.url, AttributeNames=["All"]
+                )
+                app._report_queue_stats(queue_name, attrs)
+                last_report_queue_stats = time.time()
+
             if future_tracker.has_available_space:
-                queue = scheduler.next()
                 messages = queue.receive_messages(
                     MaxNumberOfMessages=min(future_tracker.available_space(), 10),
-                    WaitTimeSeconds=1,
+                    WaitTimeSeconds=polling_wait_time,
                 )
                 for message in messages:
                     body = json.loads(message.body)

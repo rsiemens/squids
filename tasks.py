@@ -6,6 +6,13 @@ from squids.core import App, Task
 app = App('test', config={'endpoint_url': 'http://localhost:4566'})
 
 
+@app.report_queue_stats
+def reporter(queue: str, queue_stats: dict):
+    print(f"Queue stats for {queue}")
+    print(f"\tAvailable: {queue_stats['Attributes']['ApproximateNumberOfMessages']}")
+    print(f"\tDelayed: {queue_stats['Attributes']['ApproximateNumberOfMessagesDelayed']}")
+    print(f"\tIn flight: {queue_stats['Attributes']['ApproximateNumberOfMessagesNotVisible']}")
+
 @app.pre_send
 def before_send(queue: str, body: str):
     print("Running before send hook")

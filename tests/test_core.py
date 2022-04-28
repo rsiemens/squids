@@ -87,6 +87,15 @@ class AppTestCases(unittest.TestCase):
 
         self.assertEqual(app._post_send, after_send)
 
+    def test_report_queue_stats(self, _):
+        app = App("unittests")
+
+        @app.report_queue_stats
+        def report_stats(queue, stats):
+            pass
+
+        self.assertEqual(app._report_queue_stats, report_stats)
+
 
 def dummy_task():
     pass
@@ -116,6 +125,32 @@ class TaskTestCases(unittest.TestCase):
                     "kwargs": {},
                 }
             )
+        )
+
+    def test_send_job(self, _):
+        app = App("unittests")
+        mock_queue = Mock()
+        app.sqs.get_queue_by_name.return_value = mock_queue
+
+        def dummy_job(arg1, kwarg1=None):
+            self.fail("dummy_job shouldn't be called on `delay`")
+
+        task = Task(app, "test-queue", func=dummy_job)
+
+        task.send_job(
+            args=("arg1val",),
+            kwargs={"kwarg1": "kwarg1val"},
+            options={"DelaySeconds": 10},
+        )
+        mock_queue.send_message.assert_called_once_with(
+            MessageBody=json.dumps(
+                {
+                    "task": "tests.test_core.TaskTestCases.test_send_job.<locals>.dummy_job",
+                    "args": ["arg1val", "kwarg1val"],
+                    "kwargs": {},
+                }
+            ),
+            DelaySeconds=10,
         )
 
     def test_send_with_pre_and_post_hooks(self, _):

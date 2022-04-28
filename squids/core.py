@@ -19,6 +19,7 @@ class App:
         self._post_task = None
         self._pre_send = None
         self._post_send = None
+        self._report_queue_stats = None
 
     def task(self, queue):
         def wrapper(func):
@@ -34,6 +35,7 @@ class App:
             # will need to see the original function.
             # https://stackoverflow.com/questions/52185507/pickle-and-decorated-classes-picklingerror-not-the-same-object
             func.send = task.send
+            func.send_job = task.send_job
             return func
 
         return wrapper
@@ -64,12 +66,13 @@ class App:
         self._post_send = func
         return func
 
+    def report_queue_stats(self, func):
+        self._report_queue_stats = func
+        return func
+
     @functools.cache
     def get_queue_by_name(self, queue_name):
         return self.sqs.get_queue_by_name(QueueName=queue_name)
-
-    #
-    # def __getstate__(self):
 
 
 class Task:
@@ -89,7 +92,10 @@ class Task:
         # set on the consumer side via __call__
         self.id = None
 
-    def send(self, *args, **kwargs):
+    def send_job(self, args, kwargs, options=None):
+        if options is None:
+            options = {}
+
         queue = self.app.get_queue_by_name(self.queue)
         # will raise TypeError if the signature doesn't match
         bound = self.signature.bind(*args, **kwargs)
@@ -102,12 +108,15 @@ class Task:
         if self.app._pre_send is not None:
             self.app._pre_send(self.queue, body)
 
-        response = queue.send_message(MessageBody=json.dumps(body))
+        response = queue.send_message(MessageBody=json.dumps(body), **options)
 
         if self.app._post_send is not None:
             self.app._post_send(self.queue, body, response)
 
         return response
+
+    def send(self, *args, **kwargs):
+        return self.send_job(args, kwargs)
 
     def run(self, *args, **kwargs):
         if self.func is not None:

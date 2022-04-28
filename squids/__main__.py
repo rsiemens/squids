@@ -8,42 +8,43 @@ from squids.consumer import run_loop
 
 
 def banner():
-    return """\
+    return dedent(
+        """\
+                                        .%%%:
+                                      -%%%:#%%=
+              .%%%:                  %%-%.::%+#%                  .%%%:
+            -%%%:#%%=              =%::% ::::% :%*              -%%%:#%%=
+           %%-%.::%+#%            #%.:%=:::::-% :%%            %%-%.::%+#%
+         =%::% ::::% :%*         %%::-% ::::::%-::#%         =%::% ::::% :%*
+        #%.:%=:::::-% :%%       %#:::%.::::::::% :-+%       #%.:%=:::::-% :%%
+       %%::-% ::::::%-::#%     #%.:::# ::::::::#-:::##     %%::-% ::::::%-::#%
+      %#:::%.::::::::% :-+%    % :::%.::::::::::% :::%    %#:::%.::::::::% :-+%
+     #%.:::# ::::::::#-:::##  ++ .::% ::-:::-:::% :. :#  #%.:::# ::::::::#-:::##
+     % :::%.::::::::::% :::%   %#%+*#::%#%:%%%::=%+%%%   % :::%.::::::::::% :::%
+    ++ .::% ::-:::-:::% :. :#     -% ::%.#-%.%:::#=     ++ .::% ::-:::-:::% :. :#
+     %#%+*#::%#%:%%%::=%+%%%       % ::##%:%%%:::%       %#%+*#::%#%:%%%::=%+%%%
+        -% ::%.#-%.%:::#=          #. .:::::::::.%          -% ::%.#-%.%:::#=
+         % ::##%:%%%:::%            #%*-.   .:*%%            % ::##%:%%%:::%
+         #. .:::::::::.%             .-#%%%%%#-              #. .:::::::::.%
+          #%*-.   .:*%%                                       #%*-.   .:*%%
+           .-#%%%%%#-              :%%#  %##  ##%=             .-#%%%%%#-
+                                   % :% #+:-% %::%
+         :%%#  %##  ##%=           % :%:%:::% %.:#           :%%#  %##  ##%=
+         % :% #+:-% %::%           %%#%  %#%. %%#%           % :% #+:-% %::%
+         % :%:%:::% %.:#                                     % :%:%:::% %.:#
+         %%#%  %#%. %%#%                                     %%#%  %#%. %%#%
 
-                                      .%%%:
-                                    -%%%:#%%=
-            .%%%:                  %%-%.::%+#%                  .%%%:
-          -%%%:#%%=              =%::% ::::% :%*              -%%%:#%%=
-         %%-%.::%+#%            #%.:%=:::::-% :%%            %%-%.::%+#%
-       =%::% ::::% :%*         %%::-% ::::::%-::#%         =%::% ::::% :%*
-      #%.:%=:::::-% :%%       %#:::%.::::::::% :-+%       #%.:%=:::::-% :%%
-     %%::-% ::::::%-::#%     #%.:::# ::::::::#-:::##     %%::-% ::::::%-::#%
-    %#:::%.::::::::% :-+%    % :::%.::::::::::% :::%    %#:::%.::::::::% :-+%
-   #%.:::# ::::::::#-:::##  ++ .::% ::-:::-:::% :. :#  #%.:::# ::::::::#-:::##
-   % :::%.::::::::::% :::%   %#%+*#::%#%:%%%::=%+%%%   % :::%.::::::::::% :::%
-  ++ .::% ::-:::-:::% :. :#     -% ::%.#-%.%:::#=     ++ .::% ::-:::-:::% :. :#
-   %#%+*#::%#%:%%%::=%+%%%       % ::##%:%%%:::%       %#%+*#::%#%:%%%::=%+%%%
-      -% ::%.#-%.%:::#=          #. .:::::::::.%          -% ::%.#-%.%:::#=
-       % ::##%:%%%:::%            #%*-.   .:*%%            % ::##%:%%%:::%
-       #. .:::::::::.%             .-#%%%%%#-              #. .:::::::::.%
-        #%*-.   .:*%%                                       #%*-.   .:*%%
-         .-#%%%%%#-              :%%#  %##  ##%=             .-#%%%%%#-
-                                 % :% #+:-% %::%
-       :%%#  %##  ##%=           % :%:%:::% %.:#           :%%#  %##  ##%=
-       % :% #+:-% %::%           %%#%  %#%. %%#%           % :% #+:-% %::%
-       % :%:%:::% %.:#                                     % :%:%:::% %.:#
-       %%#%  %#%. %%#%                                     %%#%  %#%. %%#%
-
-              /######   /######            /##       /##  /######
-             /##__  ## /##__  ##          |__/      | ## /##__  ##
-            | ##  \__/| ##  \ ## /##   /## /##  /#######| ##  \__/
-            |  ###### | ##  | ##| ##  | ##| ## /##__  ##|  ######
-             \____  ##| ##  | ##| ##  | ##| ##| ##  | ## \____  ##
-             /##  \ ##| ##/## ##| ##  | ##| ##| ##  | ## /##  \ ##
-            |  ######/|  ######/|  ######/| ##|  #######|  ######/
-             \______/  \____ ### \______/ |__/ \_______/ \______/
-                            \__/
+                /######   /######            /##       /##  /######
+               /##__  ## /##__  ##          |__/      | ## /##__  ##
+              | ##  \__/| ##  \ ## /##   /## /##  /#######| ##  \__/
+              |  ###### | ##  | ##| ##  | ##| ## /##__  ##|  ######
+               \____  ##| ##  | ##| ##  | ##| ##| ##  | ## \____  ##
+               /##  \ ##| ##/## ##| ##  | ##| ##| ##  | ## /##  \ ##
+              |  ######/|  ######/|  ######/| ##|  #######|  ######/
+               \______/  \____ ### \______/ |__/ \_______/ \______/
+                              \__/
     """
+    )
 
 
 def parse_args():
@@ -51,15 +52,11 @@ def parse_args():
     # I'm not sure if I like processing many queues as long polling can kind
     # of mess it up in terms of consumption throughput
     parser.add_argument(
-        "--queues",
+        "--queue",
         action="store",
         type=str,
-        nargs="+",
-        required=False,
-        help=(
-            'The names of the SQS queues to process: --queues "queue1 queue2 queue3". '
-            "Defaults to all queues in the app if not provided.",
-        ),
+        required=True,
+        help="The name of the SQS queue to process.",
     )
     parser.add_argument(
         "--workers",
@@ -75,6 +72,32 @@ def parse_args():
         type=str,
         required=True,
         help="Path to the application class something like module.app where app is an instance of squids.App",
+    )
+    parser.add_argument(
+        "--report-interval",
+        action="store",
+        type=int,
+        required=False,
+        default=300,
+        help=(
+            "How often to call the report_queue_stats callback with GetQueueAttributes for the queue in seconds. "
+            "Defaults to 300 (5min). If no report_queue_stats callback has been registered then GetQueueAttributes "
+            "will not be requested. The report-interval is an at earliest time. It may take longer depending on"
+            "the polling-wait-time."
+        ),
+    )
+    parser.add_argument(
+        "--polling-wait-time",
+        action="store",
+        type=int,
+        required=False,
+        choices=range(0, 21),
+        default=5,
+        help=(
+            "The WaitTimeSeconds for polling for messages from the queue. Consult the AWS SQS docs on long polling "
+            "for more information about this setting. "
+            "https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-short-and-long-polling.html#sqs-long-polling"
+        ),
     )
     return parser.parse_args()
 
@@ -92,31 +115,29 @@ def import_app(import_path):
 
 def run(args):
     app = import_app(args.app)
-
-    if not args.queues:
-        queues = list({t.queue for t in app._tasks.values()})
-    else:
-        queues = args.queues
-
-    task_names = [n for n, t in app._tasks.items() if t.queue in queues]
+    task_names = [n for n, t in app._tasks.items() if t.queue == args.queue]
 
     print(banner())
     print(
         "[config]\n"
         f"  app = {app.name}\n"
-        f"  queues = {queues}\n"
+        f"  queue = {args.queue}\n"
         f"  workers = {args.workers}\n"
+        f"  report-interval = {args.report_interval}\n"
+        f"  polling-wait-time = {args.polling_wait_time}\n"
     )
 
     if not task_names:
-        print(f'No tasks registered for queues "{queues}"', file=sys.stderr)
+        print(f'No tasks registered for queue "{args.queue}"', file=sys.stderr)
         return
 
     print("[tasks]")
     for name in task_names:
         print(f"  - {name}")
 
-    run_loop(app, queues, args.workers)
+    run_loop(
+        app, args.queue, args.workers, args.report_interval, args.polling_wait_time
+    )
 
 
 run(parse_args())
