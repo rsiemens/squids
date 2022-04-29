@@ -6,6 +6,7 @@ format:
 
 
 test:
+	poetry run mypy squids tests
 	poetry run python -m unittest discover
 
 

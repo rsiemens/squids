@@ -1,14 +1,28 @@
+from __future__ import annotations
+
 import functools
 import inspect
 import json
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Tuple, Type
 
 import boto3
 
 from squids.consumer import Consumer
 
+if TYPE_CHECKING:
+    from mypy_boto3_sqs.literals import QueueAttributeNameType
+    from mypy_boto3_sqs.service_resource import Queue
+    from mypy_boto3_sqs.type_defs import SendMessageResultTypeDef
+
+    PreTaskCallback = Callable[[Task], None]
+    PostTaskCallback = Callable[[Task], None]
+    PreSendCallback = Callable[[str, Dict], None]
+    PostSendCallback = Callable[[str, Dict, SendMessageResultTypeDef], None]
+    ReportQueueStatsCallback = Callable[[str, Dict[QueueAttributeNameType, str]], None]
+
 
 class App:
-    def __init__(self, name, config=None):
+    def __init__(self, name: str, config: Optional[Dict] = None):
         """
         :param name: name for the app
         :param config: Dict of kwargs from https://boto3.amazonaws.com/v1/documentation/api/latest/reference/core/session.html#boto3.session.Session.resource
@@ -16,14 +30,14 @@ class App:
         self.config = config or {}
         self.name = name
         self.sqs = boto3.resource("sqs", **self.config)
-        self._tasks = {}
-        self._pre_task = None
-        self._post_task = None
-        self._pre_send = None
-        self._post_send = None
-        self._report_queue_stats = None
+        self._tasks: Dict[str, Task] = {}
+        self._pre_task: Optional[PreTaskCallback] = None
+        self._post_task: Optional[PostTaskCallback] = None
+        self._pre_send: Optional[PreSendCallback] = None
+        self._post_send: Optional[PostSendCallback] = None
+        self._report_queue_stats: Optional[ReportQueueStatsCallback] = None
 
-    def task(self, queue):
+    def task(self, queue: str) -> Callable:
         def wrapper(func):
             task = Task(
                 self,
@@ -42,7 +56,7 @@ class App:
 
         return wrapper
 
-    def add_task(self, task_cls):
+    def add_task(self, task_cls: Type[Task]) -> Task:
         task = task_cls(
             self,
             task_cls.queue,
@@ -52,38 +66,46 @@ class App:
         self._tasks[task.name] = task
         return task
 
-    def pre_task(self, func):
+    def pre_task(self, func: PreTaskCallback) -> PreTaskCallback:
         self._pre_task = func
         return func
 
-    def post_task(self, func):
+    def post_task(self, func: PostTaskCallback) -> PostTaskCallback:
         self._post_task = func
         return func
 
-    def pre_send(self, func):
+    def pre_send(self, func: PreSendCallback) -> PreSendCallback:
         self._pre_send = func
         return func
 
-    def post_send(self, func):
+    def post_send(self, func: PostSendCallback) -> PostSendCallback:
         self._post_send = func
         return func
 
-    def report_queue_stats(self, func):
+    def report_queue_stats(
+        self, func: ReportQueueStatsCallback
+    ) -> ReportQueueStatsCallback:
         self._report_queue_stats = func
         return func
 
     @functools.lru_cache()
-    def get_queue_by_name(self, queue_name):
+    def get_queue_by_name(self, queue_name: str) -> Queue:
         return self.sqs.get_queue_by_name(QueueName=queue_name)
 
-    @functools.lru_cache()
-    def get_consumer(self, queue_name):
+    def create_consumer(self, queue_name: str) -> Consumer:
         queue = self.get_queue_by_name(queue_name)
         return Consumer(self, queue)
 
 
 class Task:
-    def __init__(self, app, queue=None, func=None, pre_task=None, post_task=None):
+    def __init__(
+        self,
+        app: App,
+        queue: str,
+        func: Optional[Callable] = None,
+        pre_task: Optional[PreTaskCallback] = None,
+        post_task: Optional[PostTaskCallback] = None,
+    ):
         self.queue = queue
         if func:
             self.name = f"{func.__module__}.{func.__qualname__}"
@@ -97,11 +119,20 @@ class Task:
         self.app = app
         self.signature = inspect.signature(func if func else self.run)
         # set on the consumer side via __call__
-        self.id = None
+        self.id: Optional[str] = None
 
-    def send_job(self, args, kwargs, options=None):
+    def send_job(
+        self,
+        args: Optional[Tuple] = None,
+        kwargs: Optional[Dict] = None,
+        options: Dict = None,
+    ) -> SendMessageResultTypeDef:
         if options is None:
             options = {}
+        if args is None:
+            args = tuple()
+        if kwargs is None:
+            kwargs = {}
 
         queue = self.app.get_queue_by_name(self.queue)
         # will raise TypeError if the signature doesn't match
@@ -122,10 +153,10 @@ class Task:
 
         return response
 
-    def send(self, *args, **kwargs):
+    def send(self, *args, **kwargs) -> SendMessageResultTypeDef:
         return self.send_job(args, kwargs)
 
-    def run(self, *args, **kwargs):
+    def run(self, *args, **kwargs) -> Any:
         if self.func is not None:
             return self.func(*args, **kwargs)
 
@@ -136,7 +167,7 @@ class Task:
         state.pop("app")
         return state
 
-    def __call__(self, message_id, *args, **kwargs):
+    def __call__(self, message_id: str, *args, **kwargs) -> Any:
         self.id = message_id
 
         if self.pre_task is not None:

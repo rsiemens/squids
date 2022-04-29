@@ -9,17 +9,18 @@ app = App('test', config={'endpoint_url': 'http://localhost:4566'})
 @app.report_queue_stats
 def reporter(queue: str, queue_stats: dict):
     print(f"Queue stats for {queue}")
-    print(f"\tAvailable: {queue_stats['Attributes']['ApproximateNumberOfMessages']}")
-    print(f"\tDelayed: {queue_stats['Attributes']['ApproximateNumberOfMessagesDelayed']}")
-    print(f"\tIn flight: {queue_stats['Attributes']['ApproximateNumberOfMessagesNotVisible']}")
+    breakpoint()
+    print(f"\tAvailable: {queue_stats['ApproximateNumberOfMessages']}")
+    print(f"\tDelayed: {queue_stats['ApproximateNumberOfMessagesDelayed']}")
+    print(f"\tIn flight: {queue_stats['ApproximateNumberOfMessagesNotVisible']}")
 
 @app.pre_send
-def before_send(queue: str, body: str):
+def before_send(queue: str, body: dict):
     print("Running before send hook")
 
 
 @app.post_send
-def after_send(queue: str, body: str, response: dict):
+def after_send(queue: str, body: dict, response: dict):
     print("Running after send hook")
 
 

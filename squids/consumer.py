@@ -1,22 +1,30 @@
+from __future__ import annotations
+
 import json
 import logging
 import sys
 import time
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import Future, ProcessPoolExecutor
 from functools import partial
 from signal import SIG_IGN, SIGINT, SIGTERM, signal
+from typing import TYPE_CHECKING, Dict, Hashable, Optional, Set
 
 import boto3
+
+if TYPE_CHECKING:
+    from mypy_boto3_sqs.service_resource import Message, Queue
+
+    from squids import App
 
 logger = logging.getLogger("squidslog")
 
 
 class Consumer:
-    def __init__(self, app, queue):
+    def __init__(self, app: App, queue: Queue):
         self.app = app
         self.queue = queue
 
-    def _prepare_task(self, message):
+    def _prepare_task(self, message: Message):
         body = json.loads(message.body)
         task = self.app._tasks[body["task"]]
 
@@ -30,7 +38,7 @@ class Consumer:
         )
         return task, message.message_id, body["args"], body["kwargs"]
 
-    def consume_messages(self, options=None):
+    def consume_messages(self, options: Optional[Dict] = None):
         if options is None:
             options = {}
 
@@ -38,7 +46,7 @@ class Consumer:
         for message in messages:
             yield message
 
-    def consume(self, options=None):
+    def consume(self, options: Optional[Dict] = None):
         if options is None:
             options = {}
 
@@ -53,23 +61,23 @@ class ResourceLimitExceeded(Exception):
 
 
 class ResourceTracker:
-    def __init__(self, limit):
+    def __init__(self, limit: int):
         self.limit = limit
-        self._resources = set()
+        self._resources: Set[Hashable] = set()
 
-    def add(self, resource):
+    def add(self, resource: Hashable):
         if not self.has_available_space and resource not in self._resources:
             raise ResourceLimitExceeded()
         self._resources.add(resource)
 
-    def remove(self, resource):
+    def remove(self, resource: Hashable):
         self._resources.remove(resource)
 
-    def available_space(self):
+    def available_space(self) -> int:
         return self.limit - len(self._resources)
 
     @property
-    def has_available_space(self):
+    def has_available_space(self) -> int:
         return self.available_space() > 0
 
 
@@ -98,7 +106,13 @@ class ExitHandler:
         sys.exit(signal)
 
 
-def done_callback(future_tracker, task_name, queue_url, message, future):
+def done_callback(
+    future_tracker: ResourceTracker,
+    task_name: str,
+    queue_url: str,
+    message: Message,
+    future: Future,
+):
     # this runs in the main loop process
     try:
         future.result()
@@ -132,7 +146,13 @@ def initializer():
     signal(SIGINT, SIG_IGN)
 
 
-def run_loop(app, queue_name, n_workers, report_interval, polling_wait_time):
+def run_loop(
+    app: App,
+    queue_name: str,
+    n_workers: int,
+    report_interval: int,
+    polling_wait_time: int,
+):
     exit_handler = ExitHandler()
     future_tracker = ResourceTracker(limit=n_workers * 2)
     sqs_client = boto3.client("sqs", **app.config)
@@ -154,7 +174,7 @@ def run_loop(app, queue_name, n_workers, report_interval, polling_wait_time):
                 attrs = sqs_client.get_queue_attributes(
                     QueueUrl=queue.url, AttributeNames=["All"]
                 )
-                app._report_queue_stats(queue_name, attrs)
+                app._report_queue_stats(queue_name, attrs["Attributes"])
                 last_report_queue_stats = time.time()
 
             if future_tracker.has_available_space:

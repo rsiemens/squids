@@ -1,5 +1,10 @@
 name: CI
-on: push
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
 
 jobs:
   ci:
@@ -26,5 +31,7 @@ jobs:
         poetry run isort --diff --check squids
         poetry run black --diff --check tests
         poetry run isort --diff --check tests
+    - name: Run mypy
+      run: poetry run mypy squids tests
     - name: Run Tests
       run: poetry run python -m unittest discover
