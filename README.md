@@ -27,7 +27,7 @@ Out[2]:
    'server': 'hypercorn-h11'},
   'RetryAttempts': 0}}
 
-In [3]: consumer = app.get_consumer('test')
+In [3]: consumer = app.create_consumer('test')
 
 In [4]: consumer.consume()
 Running before task hook
