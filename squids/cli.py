@@ -103,6 +103,10 @@ def parse_args():
 
 
 def import_app(import_path):
+    cwd = os.getcwd()
+    if cwd not in sys.path:
+        sys.path.insert(0, cwd)
+
     module, path = import_path.split(".", 1)
     mod = importlib.import_module(module)
 
