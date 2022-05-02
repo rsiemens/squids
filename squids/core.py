@@ -3,6 +3,7 @@ from __future__ import annotations
 import functools
 import inspect
 import json
+import sys
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Tuple, Type
 
 import boto3
@@ -107,10 +108,16 @@ class Task:
         post_task: Optional[PostTaskCallback] = None,
     ):
         self.queue = queue
+
+        mod = func.__module__ if func else self.__class__.__module__
+        if mod == "__main__":
+            mod = sys.argv[0].rsplit("/", 1)[-1].rstrip(".py")
+
         if func:
-            self.name = f"{func.__module__}.{func.__qualname__}"
+            self.name = f"{mod}.{func.__qualname__}"
         else:
-            self.name = f"{self.__class__.__module__}.{self.__class__.__qualname__}"
+            self.name = f"{mod}.{self.__class__.__qualname__}"
+
         self.func = func
         self.pre_task = pre_task
         self.post_task = post_task
