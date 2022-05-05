@@ -1,22 +1,16 @@
-.. SQuidS documentation master file, created by
-   sphinx-quickstart on Tue Apr 26 16:06:09 2022.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
+SQuidS Documentation
+====================
 
-SQuidS
-==================================
+
+.. centered:: A Python library that makes it simple to produce and consume tasks using AWS SQS.
+
+.. figure:: https://user-images.githubusercontent.com/8187804/166835620-151c9c59-25b5-45af-949a-e8123a3578dd.png
+
+.. centered:: Icon made by `Freepik <https://www.freepik.com>`_ from `www.flaticon.com <https://www.flaticon.com/>`_
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+   :maxdepth: 1
 
-   modules
-
-
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+   installation
+   quickstart
+   api

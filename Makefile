@@ -11,7 +11,6 @@ test:
 
 
 docs:
-	poetry run sphinx-apidoc -f -o docs squids
 	poetry run sphinx-build -b html docs docs/_build
 
 

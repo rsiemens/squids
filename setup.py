@@ -6,7 +6,7 @@ with open("README.md") as f:
 
 setup(
     name="SQuidS",
-    version='0.1.0',
+    version='0.1.0a0',
     author='Ryan Siemens',
     author_email="ryanjsiemens@gmail.com",
     description="SQuidS is a Python task library for AWS SQS",

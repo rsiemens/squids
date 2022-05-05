@@ -24,10 +24,6 @@ if TYPE_CHECKING:
 
 class App:
     def __init__(self, name: str, config: Optional[Dict] = None):
-        """
-        :param name: name for the app
-        :param config: Dict of kwargs from https://boto3.amazonaws.com/v1/documentation/api/latest/reference/core/session.html#boto3.session.Session.resource
-        """
         self.config = config or {}
         self.name = name
         self.sqs = boto3.resource("sqs", **self.config)
@@ -96,6 +92,15 @@ class App:
     def create_consumer(self, queue_name: str) -> Consumer:
         queue = self.get_queue_by_name(queue_name)
         return Consumer(self, queue)
+
+    def __getstate__(self):
+        state = {**self.__dict__}
+        state.pop("sqs")
+        return state
+
+    def __setstate__(self, state):
+        state["sqs"] = boto3.resource("sqs", **state["config"])
+        return state
 
 
 class Task:
@@ -169,8 +174,7 @@ class Task:
 
     def __getstate__(self):
         state = {**self.__dict__}
-        # We only need the `app` for sending to SQS, but since boto3 does some dynamic
-        # classes, the sqs resource isn't actually picklable. This solves that.
+        # We only need the `app` for sending to SQS.
         state.pop("app")
         return state
 
