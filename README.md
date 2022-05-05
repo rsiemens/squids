@@ -14,7 +14,7 @@ Icon made by <a href="https://www.freepik.com" title="Freepik">Freepik</a> from 
 Installation
 ------------
 
-Git clone and `python -m pip install -e .`
+`python -m pip install SQuidS`
 
 Documentation
 -------------
