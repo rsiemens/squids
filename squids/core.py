@@ -23,6 +23,14 @@ if TYPE_CHECKING:
 
 
 class App:
+    """
+    The central object for registering tasks and creating consumers.
+
+    :param name: An identifier for the application.
+    :param config: An optional configuration dict which takes the same values as
+        `boto3.session.Session.resource <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/core/session.html#boto3.session.Session.resource>`_.
+    """
+
     def __init__(self, name: str, config: Optional[Dict] = None):
         self.config = config or {}
         self.name = name
@@ -35,6 +43,15 @@ class App:
         self._report_queue_stats: Optional[ReportQueueStatsCallback] = None
 
     def task(self, queue: str) -> Callable:
+        """
+        A decorator method which takes a queue name and registers the decorated function with the
+        app.
+
+        :param queue: The name of the queue that this task should go to when being sent.
+        :return: The decorated function which is augmented to have a ``send`` and ``send_job``
+            attribute.
+        """
+
         def wrapper(func):
             task = Task(
                 self,
@@ -54,6 +71,27 @@ class App:
         return wrapper
 
     def add_task(self, task_cls: Type[Task]) -> Task:
+        """
+        Provides a way for custom :class:`.Task` subclasses to be registered and created as
+        runnable tasks. Usage looks like:
+
+        .. code-block:: python
+
+            class MyTask(squids.Task):
+                queue = "some-queue"
+
+                def run(some_arg):
+                    # The task body goes here
+                    ...
+
+            my_task_instance = app.add_task(MyTask)
+            my_task.send('some_value')
+
+        :param task_cls: A subclass of :class:`.Task` which usually will have overridden the
+            :meth:`.Task.run` method.
+        :return: An instance of ``task_cls`` that can be used for sending tasks to
+            ``task_cls.queue``.
+        """
         task = task_cls(
             self,
             task_cls.queue,
@@ -64,32 +102,101 @@ class App:
         return task
 
     def pre_task(self, func: PreTaskCallback) -> PreTaskCallback:
+        """
+        Decorator for registering a callback that is invoked consumer side after the message is
+        consumed, but right before the task is run.
+
+        The callback takes a single argument, ``task``, which is an instance of :class:`.Task`.
+
+        :param func: The function to be decorated.
+        :return: The decorated function.
+        """
         self._pre_task = func
         return func
 
     def post_task(self, func: PostTaskCallback) -> PostTaskCallback:
+        """
+        Decorator for registering a callback that is invoked consumer side after the message is
+        consumed and the task is run.
+
+        The callback takes a single argument, ``task``, which is an instance of :class:`.Task`.
+
+        :param func: The function to be decorated.
+        :return: The decorated function.
+        """
         self._post_task = func
         return func
 
     def pre_send(self, func: PreSendCallback) -> PreSendCallback:
+        """
+        Decorator for registering a callback that is invoked producer side before the message is
+        sent to the queue.
+
+        The callback takes two arguments:
+
+        - ``queue`` - A string indicating the queue the message will be sent to.
+        - ``body`` - A dict that will be serialized and sent into the queue.
+
+        :param func: The function to be decorated.
+        :return: The decorated function.
+        """
         self._pre_send = func
         return func
 
     def post_send(self, func: PostSendCallback) -> PostSendCallback:
+        """
+        Decorator for registering a callback that is invoked producer side after the message is sent
+        to the queue.
+
+        The callback takes three arguments:
+
+        - ``queue`` - A string indicating the queue the message will be sent to.
+        - ``body`` - The dict that was serialized and sent into the queue.
+        - ``response`` - A dict response which is the return value from
+            `SQS.Queue.send_message <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#SQS.Queue.send_message>`_.
+
+        :param func: The function to be decorated.
+        :return: The decorated function.
+        """
         self._post_send = func
         return func
 
     def report_queue_stats(
         self, func: ReportQueueStatsCallback
     ) -> ReportQueueStatsCallback:
+        """
+        Decorator for registering a callback that is invoked periodically by the
+        :ref:`command line consumer<Command Line Consumer>`.
+
+        The callback takes two arguments:
+
+        - ``queue`` - A string indicating the queue that the stats are for.
+        - ``queue_stats`` - A dict containing attributes about the queue.
+
+        :param func: The function to be decorated.
+        :return: The decorated function.
+        """
         self._report_queue_stats = func
         return func
 
     @functools.lru_cache()
     def get_queue_by_name(self, queue_name: str) -> Queue:
+        """
+        A convenience method for getting an `SQS.Queue <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#queue>`_
+        by queue name.
+
+        :param queue_name: A string identifying the queue.
+        :return: An instance of `SQS.Queue <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#queue>`_.
+        """
         return self.sqs.get_queue_by_name(QueueName=queue_name)
 
     def create_consumer(self, queue_name: str) -> Consumer:
+        """
+        A convenience method for creating a :class:`.Consumer` instance.
+
+        :param queue_name: A string identifying the queue.
+        :return: An instance of :class:`.Consumer`.
+        """
         queue = self.get_queue_by_name(queue_name)
         return Consumer(self, queue)
 
@@ -104,6 +211,20 @@ class App:
 
 
 class Task:
+    """
+    An object that wraps some task to be done, usually a function, or some callable. You'll rarely,
+    if ever ever, need to instantiate an instance of this yourself, but instead will use
+    :meth:`.App.task` or :meth:`.App.add_task` to handle instantiating it.
+
+    :param app: An instance of :class:`.App`.
+    :param queue: A string indicating the queue that this task should be sent to.
+    :param func: The job to be done. If this is None then :meth:`.Task.run` should be overridden.
+    :param pre_task: An optional callback function to be invoked right before the task is run. See
+        :meth:`.App.pre_task` for more details on the callback.
+    :param post_task: An optional callback function to be invoked right after the task is run. See
+        :meth:`.App.post_task` for more details on the callback.
+    """
+
     def __init__(
         self,
         app: App,
@@ -137,8 +258,19 @@ class Task:
         self,
         args: Optional[Tuple] = None,
         kwargs: Optional[Dict] = None,
-        options: Dict = None,
+        options: Optional[Dict] = None,
     ) -> SendMessageResultTypeDef:
+        """
+        .. _SQS.Queue.send_message: https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#SQS.Queue.send_message
+
+        Send a task into the associated SQS queue.
+
+        :param args: Positional arguments for the task.
+        :param kwargs: Keyword arguments for the task.
+        :param options: A dict of optional arguments when sending into the queue. Takes the same
+            values as `SQS.Queue.send_message`_ minus the ``MessageBody``.
+        :return: Response dict which is the same returned by `SQS.Queue.send_message`_.
+        """
         if options is None:
             options = {}
         if args is None:
@@ -166,9 +298,26 @@ class Task:
         return response
 
     def send(self, *args, **kwargs) -> SendMessageResultTypeDef:
+        """
+        Splat args and kwargs version of :meth:`.Task.send_job` which does not support the extra
+        ``options`` argument provided by :meth:`.Task.send_job`.
+
+        :param args: Positional arguments for the task.
+        :param kwargs: Keyword arguments for the task.
+        :return: Response dict which is the same returned by
+            `SQS.Queue.send_message <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#SQS.Queue.send_message>`_.
+        """
         return self.send_job(args, kwargs)
 
     def run(self, *args, **kwargs) -> Any:
+        """
+        Executes the provided task. If you are creating your own Task subclass then this method
+        should be overridden.
+
+        :param args: Positional arguments for the task.
+        :param kwargs: Keyword arguments for the task.
+        :return: Any
+        """
         if self.func is not None:
             return self.func(*args, **kwargs)
 

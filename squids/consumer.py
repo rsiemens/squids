@@ -20,6 +20,15 @@ logger = logging.getLogger("squidslog")
 
 
 class Consumer:
+    """
+    Object which consumes messages from the provided SQS queue and executes the appropriate
+    :class:`.Task` for a message. Usually you'll create a consumer instance through the
+    :meth:`.App.create_consumer` method instead of directly instantiating one yourself.
+
+    :param app: An instance of :class:`.App`.
+    :param queue: An instance of `SQS.Queue <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#SQS.Queue>`_.
+    """
+
     def __init__(self, app: App, queue: Queue):
         self.app = app
         self.queue = queue
@@ -39,6 +48,17 @@ class Consumer:
         return task, message.message_id, body["args"], body["kwargs"]
 
     def consume_messages(self, options: Optional[Dict] = None):
+        """
+        .. _SQS.Message: https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#message
+        .. _SQS.Queue.receive_messages: https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#SQS.Queue.receive_messages
+
+        Consume messages from the associated queue. Unlike :meth:`.Consumer.consume` this method
+        returns a generator over all the `SQS.Message`_ s returned by calling
+        `SQS.Queue.receive_messages`_.
+
+        :param options: A dict of optional values to pass to `SQS.Queue.receive_messages`_.
+        :return: A generator that yields `SQS.Message`_ s.
+        """
         if options is None:
             options = {}
 
@@ -47,6 +67,16 @@ class Consumer:
             yield message
 
     def consume(self, options: Optional[Dict] = None):
+        """
+        .. _SQS.Queue.receive_messages: https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#SQS.Queue.receive_messages
+
+        Consumes messages from the associated queue and runs the appropriate :class:`.Task` for
+        each message. Calling this only consumes as many messages as `SQS.Queue.receive_messages`_
+        returns. If you want to consume continuously then you'll need to put calls to in a loop.
+
+        :param options: A dict of optional values to pass to `SQS.Queue.receive_messages`_.
+        :return:
+        """
         if options is None:
             options = {}
 

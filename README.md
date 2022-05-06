@@ -11,6 +11,21 @@ A Python library that makes it simple to produce and consume tasks using AWS SQS
 Icon made by <a href="https://www.freepik.com" title="Freepik">Freepik</a> from <a href="https://www.flaticon.com/" title="Flaticon">www.flaticon.com</a>
 </p>
 
+```python
+import squids
+
+app = squids.App("my-first-squids-app")
+
+@app.task(queue="squids-example")
+def greet(name):
+    print(f"Hello {name}!")
+
+greet.send("World")
+consumer = app.create_consumer("squids-example")
+consumer.consume()
+# >> Hello World!
+```
+
 Installation
 ------------
 
