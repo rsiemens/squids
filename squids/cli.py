@@ -48,7 +48,7 @@ def parse_args():
         action="store",
         type=str,
         required=True,
-        help="Path to the application class something like module.app where app is an instance of squids.App",
+        help="Path to the application class something like package.module:app where app is an instance of squids.App",
     )
     parser.add_argument(
         "--report-interval",
@@ -84,7 +84,7 @@ def import_app(import_path):
     if cwd not in sys.path:
         sys.path.insert(0, cwd)
 
-    module, path = import_path.split(".", 1)
+    module, path = import_path.split(":", 1)
     mod = importlib.import_module(module)
 
     app = mod
