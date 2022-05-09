@@ -59,7 +59,7 @@ how to communicate with SQS. It also takes an optional ``config`` keyword argume
         print(f"Download for {repo} complete")
 
 Our first task! It's just an ordinary function which we register with our app by using the
-``@app.task`` decorator. The decorator takes a single argument, ``queue``, which is the name of the queue that
+:meth:`.App.task` decorator. The decorator takes a single argument, ``queue``, which is the name of the queue that
 the task should go to when it's run. By decorating our function we can now send our task to the
 ``squids-example`` queue which can then be picked up and run by consumers (we'll get to consuming in a minute).
 
@@ -89,7 +89,7 @@ Let's go ahead and run it. ::
 Nice! Our tasks have been sent to the squids-example queue, but now we need a way to consume and
 run them. SQuidS includes a command line consumer which you can use to quickly start consuming tasks. ::
 
-    $ squids --queue squids-example  --app example.app
+    $ squids --queue squids-example  --app example:app
 
       /######   /######            /##       /##  /######
      /##__  ## /##__  ##          |__/      | ## /##__  ##
@@ -118,7 +118,7 @@ run them. SQuidS includes a command line consumer which you can use to quickly s
 
 
 The command line consumer takes two required arguments, ``--queue`` and ``--app``. ``--queue`` is the
-name of the queue it should be consuming tasks from and ``--app`` is the path to the ``squids.App``
+name of the queue it should be consuming tasks from and ``--app`` is the path to the :class:`squids.App`
 instance which has all the tasks you registered with it.
 
 The consumer will fetch messages from the queue and then send them to worker processes to run our

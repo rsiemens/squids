@@ -4,7 +4,7 @@ User's Guide
 Application
 -----------
 
-The ``squids.App`` serves as the central object for registering tasks and creating consumers. It is
+The :class:`squids.App` serves as the central object for registering tasks and creating consumers. It is
 also responsible for knowing how to connect to SQS. It takes two arguments, ``name`` and ``config``,
 the later of which is optional. ``name`` is a string identifier for your application while ``config`` is a dictionary of
 configuration values that are passed to `boto3.session.Session.resource <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/core/session.html#boto3.session.Session.resource>`_.
@@ -16,7 +16,7 @@ configuration values that are passed to `boto3.session.Session.resource <https:/
         config={"aws_access_key_id": "abc", "aws_secret_access_key": "secret"}
     )
 
-Once you have created a ``squids.App`` instance then you can begin registering tasks, sending
+Once you have created a :class:`squids.App` instance then you can begin registering tasks, sending
 tasks, and consuming tasks. Registering a task looks like this:
 
 .. code-block:: python
@@ -25,7 +25,7 @@ tasks, and consuming tasks. Registering a task looks like this:
     def email_customer(to_addr, from_addr, body):
         ...
 
-This will register the ``email_customer`` function as a task with the app. The ``App.task``
+This will register the ``email_customer`` function as a task with the app. The :meth:`.App.task`
 decorator takes a single argument, ``queue``, which is the name of the SQS queue where the
 task should be sent to.
 
@@ -33,7 +33,7 @@ Sending Tasks
 -------------
 
 Once you have registered your tasks with the application you can begin to send your task into the
-specified queue using ``squids.Task.send`` or ``squids.Task.send_job`` as demonstrated below:
+specified queue using :meth:`.Task.send` or :meth:`.Task.send_job` as demonstrated below:
 
 .. code-block:: python
 
@@ -67,8 +67,9 @@ Consuming Tasks
 ---------------
 
 Once you have sent a task into an SQS queue you'll likely want run it eventually. To run the task
-you need to consume it. We can get a consumer for a queue by calling ``app.create_consumer(queue_name)``.
-Once we have the consumer we can begin to consume and run our tasks like so:
+you need to consume it. We can get a consumer for a queue by calling :meth:`.App.create_consumer`.
+``create_consumer`` takes a single argument which is the queue name. Once we have the consumer we
+can begin to consume and run our tasks like so:
 
 .. code-block:: python
 
@@ -78,7 +79,7 @@ Once we have the consumer we can begin to consume and run our tasks like so:
             options={"WaitTimeSeconds": 5, "MaxNumberOfMessages": 10, "VisibilityTimeout": 30}
         )
 
-``consumer.consume`` will fetch messages from the ``emails`` SQS queue and run the function
+:meth:`.Consumer.consume` will fetch messages from the ``emails`` SQS queue and run the function
 associated with each received message. In our case it'll run the ``email_customer`` function. The
 ``options`` keyword argument is an optional dict that takes the same values as `SQS.Queue.receive_messages <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#SQS.Queue.receive_messages>`_.
 
@@ -91,11 +92,11 @@ Application Hooks
 
 There are a couple of hooks you can register with your application.
 
-- ``squids.App.pre_send`` - Runs producer side just before the task is sent to the SQS queue.
-- ``squids.App.post_send`` - Runs producer side just after the task is sent to the SQS queue.
-- ``squids.App.pre_task`` - Runs consumer side after the message is consumed, but just before the task is run.
-- ``squids.App.post_task`` - Runs consumer side after the message is consumed and the task is run.
-- ``squids.App.report_queue_stats`` - A callback that the command line consumer calls ocassionally with various queue statistics.
+- :meth:`.App.pre_send` - Runs producer side just before the task is sent to the SQS queue.
+- :meth:`.App.post_send` - Runs producer side just after the task is sent to the SQS queue.
+- :meth:`.App.pre_task` - Runs consumer side after the message is consumed, but just before the task is run.
+- :meth:`.App.post_task` - Runs consumer side after the message is consumed and the task is run.
+- :meth:`.App.report_queue_stats` - A callback that the command line consumer calls ocassionally with various queue statistics.
 
 .. code-block:: python
 
@@ -116,7 +117,7 @@ There are a couple of hooks you can register with your application.
         ...
 
     @app.report_queue_stats
-    def report(queue_stats):
+    def report(queue_name, queue_stats):
         ...
 
 These hooks provide a good opportunity for performing logging or metrics related to the production
@@ -138,17 +139,16 @@ scale out your rate of consumption.
       -h, --help            show this help message and exit
       --queue QUEUE         The name of the SQS queue to process.
       --workers WORKERS     The number of workers to run. Defaults to the number of CPUs in the system
-      --app APP             Path to the application class something like module.app where app is an instance of squids.App
+      --app APP             Path to the application class something like package.module:app where app is an instance of squids.App
       --report-interval REPORT_INTERVAL
-                            How often to call the report_queue_stats callback with GetQueueAttributes for the queue in seconds. Defaults to 300 (5min). If no report_queue_stats callback has been registered then GetQueueAttributes will not be requested. The
-                            report-interval is an at earliest time. It may take longer depending onthe polling-wait-time.
+                            How often to call the report_queue_stats callback with GetQueueAttributes for the queue in seconds. Defaults to 300 (5min). If no report_queue_stats callback has been registered then GetQueueAttributes will not be requested.
+                            The report-interval is an at earliest time. It may take longer depending onthe polling-wait-time.
       --polling-wait-time {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20}
-                            The WaitTimeSeconds for polling for messages from the queue. Consult the AWS SQS docs on long polling for more information about this setting. https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-short-
-                            and-long-polling.html#sqs-long-polling
-
+                            The WaitTimeSeconds for polling for messages from the queue. Consult the AWS SQS docs on long polling for more information about this setting. https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-
+                            short-and-long-polling.html#sqs-long-polling
 
 It works by creating a pool of worker processes. The consumer then passes the tasks it receives to be run
 by the workers. This allows for increased consumption throughput. The consumer will never consumer
-more than 2x the number of workers though to prevent feeding tasks faster than the workers can process them.
+more than 2x the number of workers to prevent feeding tasks faster than the workers can process them.
 
 If you need to increase the consumption rate then you can run the consumer on additonal machines or pods.
