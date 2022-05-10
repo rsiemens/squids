@@ -1,5 +1,6 @@
 import argparse
 import importlib
+import logging
 import os
 import sys
 from textwrap import dedent
@@ -76,6 +77,15 @@ def parse_args():
             "https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-short-and-long-polling.html#sqs-long-polling"
         ),
     )
+    parser.add_argument(
+        "--log-level",
+        action="store",
+        type=str,
+        required=False,
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default="INFO",
+        help="Set the logging level for the consumer. Logs will be handled using the logging.SteamHandler with the stream set to stdout",
+    )
     return parser.parse_args()
 
 
@@ -94,7 +104,14 @@ def import_app(import_path):
     return app
 
 
+def configure_logger(level):
+    logger = logging.getLogger("squidslog")
+    logger.setLevel(getattr(logging, level))
+    logger.addHandler(logging.StreamHandler(stream=sys.stdout))
+
+
 def run(args):
+    configure_logger(args.log_level)
     app = import_app(args.app)
     task_names = [n for n, t in app._tasks.items() if t.queue == args.queue]
 
@@ -106,6 +123,7 @@ def run(args):
         f"  workers = {args.workers}\n"
         f"  report-interval = {args.report_interval}\n"
         f"  polling-wait-time = {args.polling_wait_time}\n"
+        f"  log-level = {args.log_level}\n"
     )
 
     if not task_names:

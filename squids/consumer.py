@@ -197,7 +197,7 @@ def run_loop(
             elapsed = time.time() - last_report_queue_stats
             if elapsed >= report_interval and app._report_queue_stats is not None:
                 logger.info(
-                    f"Reporting queue stats after {elapsed} seconds",
+                    f"Reporting queue stats after {elapsed:.2f} seconds",
                     extra={"queue": queue.url, "report_interval": report_interval},
                 )
 
