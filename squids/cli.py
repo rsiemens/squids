@@ -30,6 +30,7 @@ def parse_args():
     # I'm not sure if I like processing many queues as long polling can kind
     # of mess it up in terms of consumption throughput
     parser.add_argument(
+        "-q",
         "--queue",
         action="store",
         type=str,
@@ -37,6 +38,7 @@ def parse_args():
         help="The name of the SQS queue to process.",
     )
     parser.add_argument(
+        "-w",
         "--workers",
         action="store",
         type=int,
@@ -45,6 +47,7 @@ def parse_args():
         help="The number of workers to run. Defaults to the number of CPUs in the system",
     )
     parser.add_argument(
+        "-a",
         "--app",
         action="store",
         type=str,

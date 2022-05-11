@@ -133,19 +133,26 @@ scale out your rate of consumption.
 
 .. code-block::
 
-    usage: squids [-h] --queue QUEUE [--workers WORKERS] --app APP [--report-interval REPORT_INTERVAL] [--polling-wait-time {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20}]
+    usage: squids [-h] -q QUEUE [-w WORKERS] -a APP [--report-interval REPORT_INTERVAL] [--polling-wait-time {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20}] [--visibility-timeout VISIBILITY_TIMEOUT]
+                  [--log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL}]
 
     optional arguments:
       -h, --help            show this help message and exit
-      --queue QUEUE         The name of the SQS queue to process.
-      --workers WORKERS     The number of workers to run. Defaults to the number of CPUs in the system
-      --app APP             Path to the application class something like package.module:app where app is an instance of squids.App
+      -q QUEUE, --queue QUEUE
+                            The name of the SQS queue to process.
+      -w WORKERS, --workers WORKERS
+                            The number of workers to run. Defaults to the number of CPUs in the system
+      -a APP, --app APP     Path to the application class something like package.module:app where app is an instance of squids.App
       --report-interval REPORT_INTERVAL
                             How often to call the report_queue_stats callback with GetQueueAttributes for the queue in seconds. Defaults to 300 (5min). If no report_queue_stats callback has been registered then GetQueueAttributes will not be requested.
                             The report-interval is an at earliest time. It may take longer depending onthe polling-wait-time.
       --polling-wait-time {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20}
                             The WaitTimeSeconds for polling for messages from the queue. Consult the AWS SQS docs on long polling for more information about this setting. https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-
                             short-and-long-polling.html#sqs-long-polling
+      --visibility-timeout VISIBILITY_TIMEOUT
+                            The VisibilityTimeout duration (in seconds) that the received messages are hidden from subsequent retrieve requests after being retrieved by a ReceiveMessage request.
+      --log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL}
+                            Set the logging level for the consumer. Logs will be handled using the logging.SteamHandler with the stream set to stdout
 
 It works by creating a pool of worker processes. The consumer then passes the tasks it receives to be run
 by the workers. This allows for increased consumption throughput. The consumer will never consumer

@@ -107,15 +107,16 @@ run them. SQuidS includes a command line consumer which you can use to quickly s
       workers = 8
       report-interval = 300
       polling-wait-time = 5
+      visibility-timeout = 30
+      log-level = INFO
 
     [tasks]
       - example.download_repo
 
-    Download for ticketbot complete
-    Download for djangobench complete
-    Download for djangosnippets.org complete
+    Received task: example.download_repo[510cb9aa-e61e-486c-6d03-292c4052f1cf]
+    Received task: example.download_repo[b3410155-0055-0ef8-99e7-a0f878570c81]
+    Received task: example.download_repo[5a65743c-2478-fb4b-468a-c6e9afddc87b]
     ...
-
 
 The command line consumer takes two required arguments, ``--queue`` and ``--app``. ``--queue`` is the
 name of the queue it should be consuming tasks from and ``--app`` is the path to the :class:`squids.App`
