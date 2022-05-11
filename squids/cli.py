@@ -78,6 +78,17 @@ def parse_args():
         ),
     )
     parser.add_argument(
+        "--visibility-timeout",
+        action="store",
+        type=int,
+        required=False,
+        default=30,
+        help=(
+            "The VisibilityTimeout duration (in seconds) that the received messages are hidden from subsequent "
+            "retrieve requests after being retrieved by a ReceiveMessage request."
+        ),
+    )
+    parser.add_argument(
         "--log-level",
         action="store",
         type=str,
@@ -123,6 +134,7 @@ def run(args):
         f"  workers = {args.workers}\n"
         f"  report-interval = {args.report_interval}\n"
         f"  polling-wait-time = {args.polling_wait_time}\n"
+        f"  visibility-timeout = {args.visibility_timeout}\n"
         f"  log-level = {args.log_level}\n"
     )
 
@@ -136,7 +148,12 @@ def run(args):
     print()
 
     run_loop(
-        app, args.queue, args.workers, args.report_interval, args.polling_wait_time
+        app,
+        args.queue,
+        args.workers,
+        args.report_interval,
+        args.polling_wait_time,
+        args.visibility_timeout,
     )
 
 

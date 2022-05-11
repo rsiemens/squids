@@ -182,6 +182,7 @@ def run_loop(
     n_workers: int,
     report_interval: int,
     polling_wait_time: int,
+    visibility_timeout: int,
 ):
     exit_handler = ExitHandler()
     future_tracker = ResourceTracker(limit=n_workers * 2)
@@ -214,6 +215,7 @@ def run_loop(
                             future_tracker.available_space(), 10
                         ),
                         "WaitTimeSeconds": polling_wait_time,
+                        "VisibilityTimeout": visibility_timeout,
                     }
                 ):
                     task, message_id, args, kwargs = consumer._prepare_task(message)
