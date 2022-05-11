@@ -1,13 +1,14 @@
 from setuptools import setup
 
+import squids
 
 with open("README.md") as f:
     long_desc = f.read()
 
 setup(
     name="SQuidS",
-    version='0.1.0a0',
-    author='Ryan Siemens',
+    version=squids.__version__,
+    author="Ryan Siemens",
     author_email="ryanjsiemens@gmail.com",
     description="SQuidS is a Python task library for AWS SQS",
     license="MIT License",
@@ -24,7 +25,5 @@ setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    entry_points={
-        'console_scripts': ['squids=squids.cli:main']
-    }
+    entry_points={"console_scripts": ["squids=squids.cli:main"]},
 )
