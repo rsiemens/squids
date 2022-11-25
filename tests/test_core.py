@@ -27,7 +27,7 @@ class AppTestCases(unittest.TestCase):
         self.assertEqual(
             task.name, "tests.test_core.AppTestCases.test_task.<locals>.test_task"
         )
-        self.assertEqual(task.queue, "test-queue")
+        self.assertEqual(task.queues, ["test-queue"])
         self.assertEqual(task.func, test_task)
         self.assertEqual(task.send, test_task.send)
 
@@ -219,13 +219,13 @@ class TaskTestCases(unittest.TestCase):
         def before_task(task):
             hook_call_order.append("pre_task")
 
-            self.assertEqual(task.queue, "test-queue")
+            self.assertEqual(task.queues, ["test-queue"])
             self.assertEqual(task.id, message_id)
 
         def after_task(task):
             hook_call_order.append("post_task")
 
-            self.assertEqual(task.queue, "test-queue")
+            self.assertEqual(task.queues, ["test-queue"])
             self.assertEqual(task.id, message_id)
 
         task = Task(

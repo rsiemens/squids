@@ -4,10 +4,12 @@ import functools
 import inspect
 import json
 import sys
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Tuple, Type
+from typing import (TYPE_CHECKING, Any, Callable, Dict, Iterable, List,
+                    Optional, Tuple, Type, Union)
 
 import boto3
 
+from squids import routing
 from squids.consumer import Consumer
 
 if TYPE_CHECKING:
@@ -20,6 +22,7 @@ if TYPE_CHECKING:
     PreSendCallback = Callable[[str, Dict], None]
     PostSendCallback = Callable[[str, Dict, SendMessageResultTypeDef], None]
     ReportQueueStatsCallback = Callable[[str, Dict[QueueAttributeNameType, str]], None]
+    RoutingStrategy = Callable[[List[str], Dict[str, Any]], Iterable[str]]
 
 
 class App:
@@ -42,12 +45,20 @@ class App:
         self._post_send: Optional[PostSendCallback] = None
         self._report_queue_stats: Optional[ReportQueueStatsCallback] = None
 
-    def task(self, queue: str) -> Callable:
+    def task(
+        self,
+        queue: Union[str, List[str]] = None,
+        routing_strategy: Union[str, RoutingStrategy] = routing.RANDOM,
+    ) -> Callable:
         """
         A decorator method which takes a queue name and registers the decorated function with the
         app.
 
-        :param queue: The name of the queue that this task should go to when being sent.
+        :param queue: The name of the queue that this task should go to when being sent. This can
+            also be a list of the queues that this task should go to. When it's a list, the actual
+            queue that it goes to is based on the ``routing_strategy``.
+        :param routing_strategy: When supplying multiple queues the routing strategy will determine
+            which queue(s) will actually be used at :meth:`.Task.send_job` time.
         :return: The decorated function which is augmented to have a ``send`` and ``send_job``
             attribute.
         """
@@ -56,6 +67,7 @@ class App:
             task = Task(
                 self,
                 queue,
+                routing_strategy,
                 func=func,
                 pre_task=self._pre_task,
                 post_task=self._post_task,
@@ -94,7 +106,7 @@ class App:
         """
         task = task_cls(
             self,
-            task_cls.queue,
+            task_cls.queue,  # type: ignore
             pre_task=self._pre_task,
             post_task=self._post_task,
         )
@@ -210,6 +222,10 @@ class App:
         return state
 
 
+class TaskError(Exception):
+    pass
+
+
 class Task:
     """
     An object that wraps some task to be done, usually a function, or some callable. You'll rarely,
@@ -228,12 +244,18 @@ class Task:
     def __init__(
         self,
         app: App,
-        queue: str,
+        queue: Union[str, List[str]],
+        routing_strategy: Union[str, RoutingStrategy] = routing.RANDOM,
         func: Optional[Callable] = None,
         pre_task: Optional[PreTaskCallback] = None,
         post_task: Optional[PostTaskCallback] = None,
     ):
-        self.queue = queue
+        self.queues = queue if isinstance(queue, List) else [queue]
+        self.routing_strategy = (
+            routing.ROUTING_STRATEGIES[routing_strategy]
+            if isinstance(routing_strategy, str)
+            else routing_strategy
+        )
 
         mod = func.__module__ if func else self.__class__.__module__
         if mod == "__main__":
@@ -259,7 +281,7 @@ class Task:
         args: Optional[Tuple] = None,
         kwargs: Optional[Dict] = None,
         options: Optional[Dict] = None,
-    ) -> SendMessageResultTypeDef:
+    ) -> List[Dict[str, Any]]:
         """
         .. _SQS.Queue.send_message: https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#SQS.Queue.send_message
 
@@ -278,7 +300,6 @@ class Task:
         if kwargs is None:
             kwargs = {}
 
-        queue = self.app.get_queue_by_name(self.queue)
         # will raise TypeError if the signature doesn't match
         bound = self.signature.bind(*args, **kwargs)
         body = {
@@ -287,17 +308,27 @@ class Task:
             "kwargs": bound.kwargs,
         }
 
-        if self.app._pre_send is not None:
-            self.app._pre_send(self.queue, body)
+        if len(self.queues) > 1:
+            target_queues = self.routing_strategy(self.queues, body)
+        else:
+            target_queues = self.queues
 
-        response = queue.send_message(MessageBody=json.dumps(body), **options)
+        responses = []
+        for queue_name in target_queues:
+            queue = self.app.get_queue_by_name(queue_name)
 
-        if self.app._post_send is not None:
-            self.app._post_send(self.queue, body, response)
+            if self.app._pre_send is not None:
+                self.app._pre_send(queue_name, body)
 
-        return response
+            response = queue.send_message(MessageBody=json.dumps(body), **options)
+            responses.append({"queue": queue_name, "sqs_response": response})
 
-    def send(self, *args, **kwargs) -> SendMessageResultTypeDef:
+            if self.app._post_send is not None:
+                self.app._post_send(queue_name, body, response)
+
+        return responses
+
+    def send(self, *args, **kwargs) -> List[Dict[str, Any]]:
         """
         Splat args and kwargs version of :meth:`.Task.send_job` which does not support the extra
         ``options`` argument provided by :meth:`.Task.send_job`.
