@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from squids import App, Task
+from squids.routing import broadcast_strategy, random_strategy
 
 
 @patch("squids.core.boto3")
@@ -28,8 +29,38 @@ class AppTestCases(unittest.TestCase):
             task.name, "tests.test_core.AppTestCases.test_task.<locals>.test_task"
         )
         self.assertEqual(task.queues, ["test-queue"])
+        self.assertEqual(task.routing_strategy, random_strategy)
         self.assertEqual(task.func, test_task)
         self.assertEqual(task.send, test_task.send)
+
+    def test_task__multiple_queues(self, _):
+        app = App("unittests")
+
+        @app.task(["test-queue1", "test-queue2"], routing_strategy=broadcast_strategy)
+        def test_task():
+            pass
+
+        task = app._tasks[
+            "tests.test_core.AppTestCases.test_task__multiple_queues.<locals>.test_task"
+        ]
+        self.assertEqual(task.queues, ["test-queue1", "test-queue2"])
+        self.assertEqual(task.routing_strategy, broadcast_strategy)
+
+    def test_task__custom_routing_strategy(self, _):
+        app = App("unittests")
+
+        def first(queues, payload):
+            return queues[0]
+
+        @app.task(["test-queue1", "test-queue2"], routing_strategy=first)
+        def test_task():
+            pass
+
+        task = app._tasks[
+            "tests.test_core.AppTestCases.test_task__custom_routing_strategy.<locals>.test_task"
+        ]
+        self.assertEqual(task.queues, ["test-queue1", "test-queue2"])
+        self.assertEqual(task.routing_strategy, first)
 
     def test_add_task(self, _):
         app = App("unittests")

@@ -48,7 +48,7 @@ class App:
     def task(
         self,
         queue: Union[str, List[str]] = None,
-        routing_strategy: Union[str, RoutingStrategy] = routing.RANDOM,
+        routing_strategy: RoutingStrategy = routing.random_strategy,
     ) -> Callable:
         """
         A decorator method which takes a queue name and registers the decorated function with the
@@ -233,7 +233,9 @@ class Task:
     :meth:`.App.task` or :meth:`.App.add_task` to handle instantiating it.
 
     :param app: An instance of :class:`.App`.
-    :param queue: A string indicating the queue that this task should be sent to.
+    :param queue: A string or list indicating the queue or queues that this task should be sent to.
+    :param routing_strategy: When supplying multiple queues the routing strategy will determine
+        which queue(s) will actually be used at :meth:`.Task.send_job` time.
     :param func: The job to be done. If this is None then :meth:`.Task.run` should be overridden.
     :param pre_task: An optional callback function to be invoked right before the task is run. See
         :meth:`.App.pre_task` for more details on the callback.
@@ -245,17 +247,13 @@ class Task:
         self,
         app: App,
         queue: Union[str, List[str]],
-        routing_strategy: Union[str, RoutingStrategy] = routing.RANDOM,
+        routing_strategy: RoutingStrategy = routing.random_strategy,
         func: Optional[Callable] = None,
         pre_task: Optional[PreTaskCallback] = None,
         post_task: Optional[PostTaskCallback] = None,
     ):
         self.queues = queue if isinstance(queue, List) else [queue]
-        self.routing_strategy = (
-            routing.ROUTING_STRATEGIES[routing_strategy]
-            if isinstance(routing_strategy, str)
-            else routing_strategy
-        )
+        self.routing_strategy = routing_strategy
 
         mod = func.__module__ if func else self.__class__.__module__
         if mod == "__main__":
@@ -281,6 +279,7 @@ class Task:
         args: Optional[Tuple] = None,
         kwargs: Optional[Dict] = None,
         options: Optional[Dict] = None,
+        queue: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         .. _SQS.Queue.send_message: https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#SQS.Queue.send_message
@@ -291,6 +290,7 @@ class Task:
         :param kwargs: Keyword arguments for the task.
         :param options: A dict of optional arguments when sending into the queue. Takes the same
             values as `SQS.Queue.send_message`_ minus the ``MessageBody``.
+        :param queue: Forces sending a message to specific queue regardless of ``routing_strategy``.
         :return: Response dict which is the same returned by `SQS.Queue.send_message`_.
         """
         if options is None:
@@ -313,14 +313,17 @@ class Task:
         else:
             target_queues = self.queues
 
+        if queue is not None and queue not in self.queues:
+            raise ValueError(f'Forced queue "{queue}" is not an option for this task.')
+
         responses = []
         for queue_name in target_queues:
-            queue = self.app.get_queue_by_name(queue_name)
+            sqs_queue = self.app.get_queue_by_name(queue_name)
 
             if self.app._pre_send is not None:
                 self.app._pre_send(queue_name, body)
 
-            response = queue.send_message(MessageBody=json.dumps(body), **options)
+            response = sqs_queue.send_message(MessageBody=json.dumps(body), **options)
             responses.append({"queue": queue_name, "sqs_response": response})
 
             if self.app._post_send is not None:

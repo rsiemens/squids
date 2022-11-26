@@ -76,7 +76,7 @@ def recursive_task(n):
         recursive_task.send(n - 1)
 
 
-@app.task(queue=["test", "special"], routing_strategy=routing.BROADCAST)
+@app.task(queue=["test", "special"], routing_strategy=routing.broadcast_strategy)
 def broadcast_task(msg):
     print(msg)
 
@@ -86,6 +86,6 @@ def random_queue_task(msg):
     print(msg)
 
 
-@app.task(queue=["test", "special", "other"], routing_strategy=routing.HASH)  # default random strategy
+@app.task(queue=["test", "special", "other"], routing_strategy=routing.hash_strategy)
 def hash_queue_task(msg):
     print(msg)
