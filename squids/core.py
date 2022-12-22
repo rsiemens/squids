@@ -4,10 +4,23 @@ import functools
 import inspect
 import json
 import sys
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Tuple, Type
+from copy import copy
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    Union,
+)
 
 import boto3
 
+from squids import routing
 from squids.consumer import Consumer
 
 if TYPE_CHECKING:
@@ -20,6 +33,7 @@ if TYPE_CHECKING:
     PreSendCallback = Callable[[str, Dict], None]
     PostSendCallback = Callable[[str, Dict, SendMessageResultTypeDef], None]
     ReportQueueStatsCallback = Callable[[str, Dict[QueueAttributeNameType, str]], None]
+    RoutingStrategy = Callable[[List[str], Dict[str, Any]], Iterable[str]]
 
 
 class App:
@@ -42,12 +56,20 @@ class App:
         self._post_send: Optional[PostSendCallback] = None
         self._report_queue_stats: Optional[ReportQueueStatsCallback] = None
 
-    def task(self, queue: str) -> Callable:
+    def task(
+        self,
+        queue: Union[str, List[str]] = None,
+        routing_strategy: RoutingStrategy = routing.random_strategy,
+    ) -> Callable:
         """
         A decorator method which takes a queue name and registers the decorated function with the
         app.
 
-        :param queue: The name of the queue that this task should go to when being sent.
+        :param queue: The name of the queue that this task should go to when being sent. This can
+            also be a list of the queues that this task should go to. When it's a list, the actual
+            queue that it goes to is based on the ``routing_strategy``.
+        :param routing_strategy: When supplying multiple queues the routing strategy will determine
+            which queue(s) will actually be used at :meth:`.Task.send_job` time.
         :return: The decorated function which is augmented to have a ``send`` and ``send_job``
             attribute.
         """
@@ -56,6 +78,7 @@ class App:
             task = Task(
                 self,
                 queue,
+                routing_strategy,
                 func=func,
                 pre_task=self._pre_task,
                 post_task=self._post_task,
@@ -94,7 +117,7 @@ class App:
         """
         task = task_cls(
             self,
-            task_cls.queue,
+            task_cls.queue,  # type: ignore
             pre_task=self._pre_task,
             post_task=self._post_task,
         )
@@ -217,7 +240,9 @@ class Task:
     :meth:`.App.task` or :meth:`.App.add_task` to handle instantiating it.
 
     :param app: An instance of :class:`.App`.
-    :param queue: A string indicating the queue that this task should be sent to.
+    :param queue: A string or list indicating the queue or queues that this task should be sent to.
+    :param routing_strategy: When supplying multiple queues the routing strategy will determine
+        which queue(s) will actually be used at :meth:`.Task.send_job` time.
     :param func: The job to be done. If this is None then :meth:`.Task.run` should be overridden.
     :param pre_task: An optional callback function to be invoked right before the task is run. See
         :meth:`.App.pre_task` for more details on the callback.
@@ -228,12 +253,14 @@ class Task:
     def __init__(
         self,
         app: App,
-        queue: str,
+        queue: Union[str, List[str]],
+        routing_strategy: RoutingStrategy = routing.random_strategy,
         func: Optional[Callable] = None,
         pre_task: Optional[PreTaskCallback] = None,
         post_task: Optional[PostTaskCallback] = None,
     ):
-        self.queue = queue
+        self.queues = queue if isinstance(queue, List) else [queue]
+        self.routing_strategy = routing_strategy
 
         mod = func.__module__ if func else self.__class__.__module__
         if mod == "__main__":
@@ -259,7 +286,8 @@ class Task:
         args: Optional[Tuple] = None,
         kwargs: Optional[Dict] = None,
         options: Optional[Dict] = None,
-    ) -> SendMessageResultTypeDef:
+        queue: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         """
         .. _SQS.Queue.send_message: https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#SQS.Queue.send_message
 
@@ -269,7 +297,9 @@ class Task:
         :param kwargs: Keyword arguments for the task.
         :param options: A dict of optional arguments when sending into the queue. Takes the same
             values as `SQS.Queue.send_message`_ minus the ``MessageBody``.
-        :return: Response dict which is the same returned by `SQS.Queue.send_message`_.
+        :param queue: Forces sending a message to specific queue regardless of ``routing_strategy``.
+        :return: List of dicts containing the queue name and the response from SQS which is the same
+            returned by `SQS.Queue.send_message`_.
         """
         if options is None:
             options = {}
@@ -278,7 +308,6 @@ class Task:
         if kwargs is None:
             kwargs = {}
 
-        queue = self.app.get_queue_by_name(self.queue)
         # will raise TypeError if the signature doesn't match
         bound = self.signature.bind(*args, **kwargs)
         body = {
@@ -287,25 +316,40 @@ class Task:
             "kwargs": bound.kwargs,
         }
 
-        if self.app._pre_send is not None:
-            self.app._pre_send(self.queue, body)
+        if len(self.queues) > 1:
+            target_queues = self.routing_strategy(copy(self.queues), body)
+        else:
+            target_queues = self.queues
 
-        response = queue.send_message(MessageBody=json.dumps(body), **options)
+        if queue is not None and queue not in self.queues:
+            raise ValueError(f'Forced queue "{queue}" is not an option for this task.')
+        elif queue is not None:
+            target_queues = [queue]
 
-        if self.app._post_send is not None:
-            self.app._post_send(self.queue, body, response)
+        responses = []
+        for queue_name in target_queues:
+            sqs_queue = self.app.get_queue_by_name(queue_name)
 
-        return response
+            if self.app._pre_send is not None:
+                self.app._pre_send(queue_name, body)
 
-    def send(self, *args, **kwargs) -> SendMessageResultTypeDef:
+            response = sqs_queue.send_message(MessageBody=json.dumps(body), **options)
+            responses.append({"queue": queue_name, "sqs_response": response})
+
+            if self.app._post_send is not None:
+                self.app._post_send(queue_name, body, response)
+
+        return responses
+
+    def send(self, *args, **kwargs) -> List[Dict[str, Any]]:
         """
         Splat args and kwargs version of :meth:`.Task.send_job` which does not support the extra
-        ``options`` argument provided by :meth:`.Task.send_job`.
+        ``options`` or ``queue`` argument provided by :meth:`.Task.send_job`.
 
         :param args: Positional arguments for the task.
         :param kwargs: Keyword arguments for the task.
-        :return: Response dict which is the same returned by
-            `SQS.Queue.send_message <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#SQS.Queue.send_message>`_.
+        :return: List of dicts containing the queue name and the response from SQS which is the same
+            returned by `SQS.Queue.send_message <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#SQS.Queue.send_message>`_.
         """
         return self.send_job(args, kwargs)
 

@@ -127,7 +127,7 @@ def configure_logger(level):
 def run(args):
     configure_logger(args.log_level)
     app = import_app(args.app)
-    task_names = [n for n, t in app._tasks.items() if t.queue == args.queue]
+    task_names = [n for n, t in app._tasks.items() if args.queue in t.queues]
 
     print(banner())
     print(

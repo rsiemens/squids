@@ -18,7 +18,12 @@ sphinx-autodoc-typehints = "^1.18.1"
 furo = "^2022.4.7"
 mypy = "^0.950"
 boto3-stubs = {extras = ["essential"], version = "^1.22.3"}
+awscli-local = "^0.20"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.isort]
+profile = "black"
+multi_line_output=3
