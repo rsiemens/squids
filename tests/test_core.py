@@ -184,6 +184,67 @@ class TaskTestCases(unittest.TestCase):
             DelaySeconds=10,
         )
 
+    def test_send_job_queue_override(self, _):
+        app = App("unittests")
+        mock_queue = Mock()
+        app.sqs.get_queue_by_name.return_value = mock_queue
+
+        def dummy_job(arg1, kwarg1=None):
+            self.fail("dummy_job shouldn't be called on `delay`")
+
+        task = Task(app, ["q1", "q2", "q3"], func=dummy_job)
+
+        # can't force sending to a queue that isn't listed for the task
+        with self.assertRaises(ValueError):
+            task.send_job(
+                args=("arg1val",),
+                kwargs={"kwarg1": "kwarg1val"},
+                queue="q4",
+            )
+
+        task.send_job(
+            args=("arg1val",),
+            kwargs={"kwarg1": "kwarg1val"},
+            queue="q2",
+        )
+        mock_queue.send_message.assert_called_once_with(
+            MessageBody=json.dumps(
+                {
+                    "task": "tests.test_core.TaskTestCases.test_send_job_queue_override.<locals>.dummy_job",
+                    "args": ["arg1val", "kwarg1val"],
+                    "kwargs": {},
+                }
+            )
+        )
+
+    def test_send_job_calls_routing_strategy(self, _):
+        app = App("unittests")
+        mock_queue = Mock()
+        app.sqs.get_queue_by_name.return_value = mock_queue
+
+        routing_mock = Mock()
+        routing_mock.return_value = ["q3"]
+
+        def dummy_job(arg1, kwarg1=None):
+            self.fail("dummy_job shouldn't be called on `delay`")
+
+        task = Task(
+            app, ["q1", "q2", "q3"], routing_strategy=routing_mock, func=dummy_job
+        )
+        task.send_job(
+            args=("arg1val",),
+            kwargs={"kwarg1": "kwarg1val"},
+        )
+        msg_body = {
+            "task": "tests.test_core.TaskTestCases.test_send_job_calls_routing_strategy.<locals>.dummy_job",
+            "args": ("arg1val", "kwarg1val"),
+            "kwargs": {},
+        }
+        routing_mock.assert_called_once_with(["q1", "q2", "q3"], msg_body)
+        mock_queue.send_message.assert_called_once_with(
+            MessageBody=json.dumps(msg_body)
+        )
+
     def test_send_with_pre_and_post_hooks(self, _):
         app = App("unittests")
         hook_call_order = []

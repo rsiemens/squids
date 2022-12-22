@@ -4,6 +4,7 @@ import functools
 import inspect
 import json
 import sys
+from copy import copy
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -232,10 +233,6 @@ class App:
         return state
 
 
-class TaskError(Exception):
-    pass
-
-
 class Task:
     """
     An object that wraps some task to be done, usually a function, or some callable. You'll rarely,
@@ -301,7 +298,8 @@ class Task:
         :param options: A dict of optional arguments when sending into the queue. Takes the same
             values as `SQS.Queue.send_message`_ minus the ``MessageBody``.
         :param queue: Forces sending a message to specific queue regardless of ``routing_strategy``.
-        :return: Response dict which is the same returned by `SQS.Queue.send_message`_.
+        :return: List of dicts containing the queue name and the response from SQS which is the same
+            returned by `SQS.Queue.send_message`_.
         """
         if options is None:
             options = {}
@@ -319,12 +317,14 @@ class Task:
         }
 
         if len(self.queues) > 1:
-            target_queues = self.routing_strategy(self.queues, body)
+            target_queues = self.routing_strategy(copy(self.queues), body)
         else:
             target_queues = self.queues
 
         if queue is not None and queue not in self.queues:
             raise ValueError(f'Forced queue "{queue}" is not an option for this task.')
+        elif queue is not None:
+            target_queues = [queue]
 
         responses = []
         for queue_name in target_queues:
@@ -344,12 +344,12 @@ class Task:
     def send(self, *args, **kwargs) -> List[Dict[str, Any]]:
         """
         Splat args and kwargs version of :meth:`.Task.send_job` which does not support the extra
-        ``options`` argument provided by :meth:`.Task.send_job`.
+        ``options`` or ``queue`` argument provided by :meth:`.Task.send_job`.
 
         :param args: Positional arguments for the task.
         :param kwargs: Keyword arguments for the task.
-        :return: Response dict which is the same returned by
-            `SQS.Queue.send_message <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#SQS.Queue.send_message>`_.
+        :return: List of dicts containing the queue name and the response from SQS which is the same
+            returned by `SQS.Queue.send_message <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#SQS.Queue.send_message>`_.
         """
         return self.send_job(args, kwargs)
 
