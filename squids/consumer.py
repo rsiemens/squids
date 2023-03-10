@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 import sys
 import time
@@ -34,7 +33,7 @@ class Consumer:
         self.queue = queue
 
     def _prepare_task(self, message: Message):
-        body = json.loads(message.body)
+        body = self.app._serde.deserialize(message.body)
         task = self.app._tasks[body["task"]]
 
         logger.info(

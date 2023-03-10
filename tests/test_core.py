@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 
 from squids import App, Task
 from squids.routing import broadcast_strategy, random_strategy
+from squids.serde import JSONSerde, Serde
 
 
 @patch("squids.core.boto3")
@@ -12,6 +13,7 @@ class AppTestCases(unittest.TestCase):
     def test_init(self, _):
         app = App("unittests")
         self.assertEqual(app.name, "unittests")
+        self.assertEqual(app._serde, JSONSerde)
 
     def test_task(self, _):
         app = App("unittests")
@@ -243,6 +245,36 @@ class TaskTestCases(unittest.TestCase):
         routing_mock.assert_called_once_with(["q1", "q2", "q3"], msg_body)
         mock_queue.send_message.assert_called_once_with(
             MessageBody=json.dumps(msg_body)
+        )
+
+    def test_send_job_uses_app_serde_to_serialize(self, _):
+        expected_job_body = {
+            "task": "tests.test_core.TaskTestCases.test_send_job_uses_app_serde_to_serialize.<locals>.dummy_job",
+            "args": ("arg1val", "kwarg1val"),
+            "kwargs": {},
+        }
+
+        class DumbSerde(Serde):
+            @classmethod
+            def serialize(cls, body):
+                self.assertEqual(body, expected_job_body)
+                return "I'm serialized"
+
+        app = App("unittests", serde=DumbSerde)
+        mock_queue = Mock()
+        app.sqs.get_queue_by_name.return_value = mock_queue
+
+        def dummy_job(arg1, kwarg1=None):
+            self.fail("dummy_job shouldn't be called on `delay`")
+
+        task = Task(app, "test-queue", func=dummy_job)
+
+        task.send_job(
+            args=("arg1val",),
+            kwargs={"kwarg1": "kwarg1val"},
+        )
+        mock_queue.send_message.assert_called_once_with(
+            MessageBody="I'm serialized",
         )
 
     def test_send_with_pre_and_post_hooks(self, _):
