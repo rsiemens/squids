@@ -43,7 +43,7 @@ Let's quickly go over what this does starting at the top.
     app = App("squids-example-app")
 
 This creates an instance of our SQuidS application, called ``squids-example-app``, which holds all the tasks we register and knows
-how to communicate with SQS. It also takes an optional ``config`` keyword argument which is a dictionary that takes the same values as `boto3.session.Session.resource <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/core/session.html#boto3.session.Session.resource>`_.
+how to communicate with SQS. It also takes an optional ``boto_config`` keyword argument which is a dictionary that takes the same values as `boto3.session.Session.resource <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/core/session.html#boto3.session.Session.resource>`_.
 
 .. code-block:: python
 

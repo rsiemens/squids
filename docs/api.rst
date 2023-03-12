@@ -5,3 +5,13 @@ API Reference
    :members:
    :undoc-members:
    :show-inheritance:
+
+.. automodule:: squids.serde
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: squids.routing
+   :members:
+   :undoc-members:
+   :show-inheritance:

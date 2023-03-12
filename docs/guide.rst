@@ -4,16 +4,16 @@ User's Guide
 Application
 -----------
 
-The :class:`squids.App` serves as the central object for registering tasks and creating consumers. It is
-also responsible for knowing how to connect to SQS. It takes two arguments, ``name`` and ``config``,
-the later of which is optional. ``name`` is a string identifier for your application while ``config`` is a dictionary of
-configuration values that are passed to `boto3.session.Session.resource <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/core/session.html#boto3.session.Session.resource>`_.
+The :class:`squids.App` serves as the central object for configuration, registering tasks, and creating consumers. It is
+also responsible for knowing how to connect to SQS. It takes several arguments, but the ones you will use most often are
+``name`` and ``boto_config``, the later of which is optional. ``name`` is a string identifier for your application while
+``boto_config`` is a dictionary of configuration values that are passed to `boto3.session.Session.resource <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/core/session.html#boto3.session.Session.resource>`_.
 
 .. code-block:: python
 
     app = squids.App(
         "my-app",
-        config={"aws_access_key_id": "abc", "aws_secret_access_key": "secret"}
+        boto_config={"aws_access_key_id": "abc", "aws_secret_access_key": "secret"}
     )
 
 Once you have created a :class:`squids.App` instance then you can begin registering tasks, sending
@@ -26,8 +26,7 @@ tasks, and consuming tasks. Registering a task looks like this:
         ...
 
 This will register the ``email_customer`` function as a task with the app. The :meth:`.App.task`
-decorator takes a single argument, ``queue``, which is the name of the SQS queue where the
-task should be sent to.
+decorator takes a ``queue`` argument, which is the name of the SQS queue where the task should be sent to.
 
 Sending Tasks
 -------------
@@ -46,13 +45,15 @@ specified queue using :meth:`.Task.send` or :meth:`.Task.send_job` as demonstrat
 
 Calling ``send`` or ``send_job`` will ensure that any arguments and keyword arguments match the
 signature of the function. If they don't a ``TypeError`` will be raised. Both ``send`` and ``send_job``
-will return a response of the same form as `SQS.Queue.send_message <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#SQS.Queue.send_message>`_.
+will return a response of the same form, a `SQS.Queue.send_message <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#SQS.Queue.send_message>`_.
 The difference between ``send`` and ``send_job`` is that ``send_job`` also accepts an ``options``
 dict which accepts all the same arguments as `SQS.Queue.send_message <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#SQS.Queue.send_message>`_
 except for the ``MessageBody``.
 
-When you send a task it will serialize the arguments and keyword arguments using `json <https://docs.python.org/3/library/json.html>`_.
-This means that anything unable to be json serialized cannot be passed to ``send`` or ``send_job``.
+    When you send a task it will, by default, serialize the arguments and keyword arguments using `json <https://docs.python.org/3/library/json.html>`_.
+    This means that anything unable to be json serialized cannot be passed to ``send`` or ``send_job``. This behavior
+    can be customized by providing the ``serde`` keyword argument to :class:`squids.App` with a class that is of type
+    :class:`squids.serde.Serde`.
 
 You can still run your functions synchronously if you want.
 
@@ -61,7 +62,7 @@ You can still run your functions synchronously if you want.
     email_customer("foo@domain.com", "bar@domain.com", "Hello!")
 
 Doing this will **not** send a task through the SQS queue, but instead simply call the function and
-execute it in process like normal.
+execute it in the calling process like normal.
 
 Consuming Tasks
 ---------------

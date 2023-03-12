@@ -185,7 +185,7 @@ def run_loop(
 ):
     exit_handler = ExitHandler()
     future_tracker = ResourceTracker(limit=n_workers * 2)
-    sqs_client = boto3.client("sqs", **app.config)
+    sqs_client = boto3.client("sqs", **app.boto_config)
     queue = app.get_queue_by_name(queue_name)
     consumer = Consumer(app, queue)
     last_report_queue_stats = time.time()
