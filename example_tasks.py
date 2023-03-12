@@ -1,10 +1,10 @@
 import random
 import time
 
-from squids.core import App, Task
 from squids import routing
+from squids.core import App, Task
 
-app = App("test", config={"endpoint_url": "http://localhost:4566"})
+app = App("test", boto_config={"endpoint_url": "http://localhost:4566"})
 
 
 @app.report_queue_stats

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import functools
 import inspect
-import json
 import sys
 from copy import copy
 from typing import (
@@ -22,6 +21,7 @@ import boto3
 
 from squids import routing
 from squids.consumer import Consumer
+from squids.serde import JSONSerde, Serde
 
 if TYPE_CHECKING:
     from mypy_boto3_sqs.literals import QueueAttributeNameType
@@ -41,14 +41,23 @@ class App:
     The central object for registering tasks and creating consumers.
 
     :param name: An identifier for the application.
-    :param config: An optional configuration dict which takes the same values as
+    :param boto_config: An optional configuration dict which takes the same values as
         `boto3.session.Session.resource <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/core/session.html#boto3.session.Session.resource>`_.
+    :param serde: An optional :class:`.Serde` subclass that is used to serialize and deserialize
+        message bodies when sending and consuming. If not provided, :class:`.JSONSerde` will be
+        used.
     """
 
-    def __init__(self, name: str, config: Optional[Dict] = None):
-        self.config = config or {}
+    def __init__(
+        self,
+        name: str,
+        boto_config: Optional[Dict] = None,
+        serde: Type[Serde] = JSONSerde,
+    ):
         self.name = name
-        self.sqs = boto3.resource("sqs", **self.config)
+        self.boto_config = boto_config or {}
+        self.sqs = boto3.resource("sqs", **self.boto_config)
+        self._serde = serde
         self._tasks: Dict[str, Task] = {}
         self._pre_task: Optional[PreTaskCallback] = None
         self._post_task: Optional[PostTaskCallback] = None
@@ -229,7 +238,7 @@ class App:
         return state
 
     def __setstate__(self, state):
-        state["sqs"] = boto3.resource("sqs", **state["config"])
+        state["sqs"] = boto3.resource("sqs", **state["boto_config"])
         return state
 
 
@@ -333,7 +342,10 @@ class Task:
             if self.app._pre_send is not None:
                 self.app._pre_send(queue_name, body)
 
-            response = sqs_queue.send_message(MessageBody=json.dumps(body), **options)
+            # encoder plugin
+            response = sqs_queue.send_message(
+                MessageBody=self.app._serde.serialize(body), **options
+            )
             responses.append({"queue": queue_name, "sqs_response": response})
 
             if self.app._post_send is not None:

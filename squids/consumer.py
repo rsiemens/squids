@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 import sys
 import time
@@ -34,7 +33,7 @@ class Consumer:
         self.queue = queue
 
     def _prepare_task(self, message: Message):
-        body = json.loads(message.body)
+        body = self.app._serde.deserialize(message.body)
         task = self.app._tasks[body["task"]]
 
         logger.info(
@@ -186,7 +185,7 @@ def run_loop(
 ):
     exit_handler = ExitHandler()
     future_tracker = ResourceTracker(limit=n_workers * 2)
-    sqs_client = boto3.client("sqs", **app.config)
+    sqs_client = boto3.client("sqs", **app.boto_config)
     queue = app.get_queue_by_name(queue_name)
     consumer = Consumer(app, queue)
     last_report_queue_stats = time.time()

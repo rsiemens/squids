@@ -4,6 +4,7 @@ from unittest.mock import Mock, call, patch
 
 from squids.consumer import Consumer, ResourceLimitExceeded, ResourceTracker
 from squids.core import App
+from squids.serde import Serde
 
 
 class ResourceTrackerTestCases(unittest.TestCase):
@@ -65,6 +66,31 @@ class ConsumeTestCases(unittest.TestCase):
         consumer = Consumer(app, Mock())
         task, message_id, args, kwargs = consumer._prepare_task(
             Mock(message_id="123", body=json.dumps(body))
+        )
+
+        self.assertEqual(task, fake_task)
+        self.assertEqual(message_id, "123")
+        self.assertEqual(args, [1, 2, 3])
+        self.assertEqual(kwargs, {})
+
+    def test_prepare_task_uses_app_serde_to_deserialize(self, _):
+        class DumbSerde(Serde):
+            @classmethod
+            def deserialize(cls, body):
+                self.assertEqual(body, "I'm serialized")
+                return {
+                    "task": "fake_task",
+                    "args": [1, 2, 3],
+                    "kwargs": {},
+                }
+
+        app = App("test", serde=DumbSerde)
+        fake_task = Mock()
+        app._tasks["fake_task"] = fake_task
+
+        consumer = Consumer(app, Mock())
+        task, message_id, args, kwargs = consumer._prepare_task(
+            Mock(message_id="123", body="I'm serialized")
         )
 
         self.assertEqual(task, fake_task)
