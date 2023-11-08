@@ -55,19 +55,6 @@ def parse_args():
         help="Path to the application class something like package.module:app where app is an instance of squids.App",
     )
     parser.add_argument(
-        "--report-interval",
-        action="store",
-        type=int,
-        required=False,
-        default=300,
-        help=(
-            "How often to call the report_queue_stats callback with GetQueueAttributes for the queue in seconds. "
-            "Defaults to 300 (5min). If no report_queue_stats callback has been registered then GetQueueAttributes "
-            "will not be requested. The report-interval is an at earliest time. It may take longer depending on"
-            "the polling-wait-time."
-        ),
-    )
-    parser.add_argument(
         "--polling-wait-time",
         action="store",
         type=int,
@@ -135,7 +122,6 @@ def run(args):
         f"  app = {app.name}\n"
         f"  queue = {args.queue}\n"
         f"  workers = {args.workers}\n"
-        f"  report-interval = {args.report_interval}\n"
         f"  polling-wait-time = {args.polling_wait_time}\n"
         f"  visibility-timeout = {args.visibility_timeout}\n"
         f"  log-level = {args.log_level}\n"
@@ -154,7 +140,6 @@ def run(args):
         app,
         args.queue,
         args.workers,
-        args.report_interval,
         args.polling_wait_time,
         args.visibility_timeout,
     )

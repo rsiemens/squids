@@ -120,15 +120,6 @@ class AppTestCases(unittest.TestCase):
 
         self.assertEqual(app._post_send, after_send)
 
-    def test_report_queue_stats(self, _):
-        app = App("unittests")
-
-        @app.report_queue_stats
-        def report_stats(queue, stats):
-            pass
-
-        self.assertEqual(app._report_queue_stats, report_stats)
-
 
 def dummy_task():
     pass

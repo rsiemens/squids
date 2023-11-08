@@ -97,7 +97,6 @@ There are a couple of hooks you can register with your application.
 - :meth:`.App.post_send` - Runs producer side just after the task is sent to the SQS queue.
 - :meth:`.App.pre_task` - Runs consumer side after the message is consumed, but just before the task is run.
 - :meth:`.App.post_task` - Runs consumer side after the message is consumed and the task is run.
-- :meth:`.App.report_queue_stats` - A callback that the command line consumer calls ocassionally with various queue statistics.
 
 .. code-block:: python
 
@@ -117,10 +116,6 @@ There are a couple of hooks you can register with your application.
     def after_task(task):
         ...
 
-    @app.report_queue_stats
-    def report(queue_name, queue_stats):
-        ...
-
 These hooks provide a good opportunity for performing logging or metrics related to the production
 and consumption of tasks.
 
@@ -134,7 +129,7 @@ scale out your rate of consumption.
 
 .. code-block::
 
-    usage: squids [-h] -q QUEUE [-w WORKERS] -a APP [--report-interval REPORT_INTERVAL] [--polling-wait-time {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20}] [--visibility-timeout VISIBILITY_TIMEOUT]
+    usage: squids [-h] -q QUEUE [-w WORKERS] -a APP [--polling-wait-time {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20}] [--visibility-timeout VISIBILITY_TIMEOUT]
                   [--log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL}]
 
     optional arguments:
@@ -144,9 +139,6 @@ scale out your rate of consumption.
       -w WORKERS, --workers WORKERS
                             The number of workers to run. Defaults to the number of CPUs in the system
       -a APP, --app APP     Path to the application class something like package.module:app where app is an instance of squids.App
-      --report-interval REPORT_INTERVAL
-                            How often to call the report_queue_stats callback with GetQueueAttributes for the queue in seconds. Defaults to 300 (5min). If no report_queue_stats callback has been registered then GetQueueAttributes will not be requested.
-                            The report-interval is an at earliest time. It may take longer depending onthe polling-wait-time.
       --polling-wait-time {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20}
                             The WaitTimeSeconds for polling for messages from the queue. Consult the AWS SQS docs on long polling for more information about this setting. https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-
                             short-and-long-polling.html#sqs-long-polling

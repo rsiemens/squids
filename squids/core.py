@@ -32,7 +32,6 @@ if TYPE_CHECKING:
     PostTaskCallback = Callable[[Task], None]
     PreSendCallback = Callable[[str, Dict], None]
     PostSendCallback = Callable[[str, Dict, SendMessageResultTypeDef], None]
-    ReportQueueStatsCallback = Callable[[str, Dict[QueueAttributeNameType, str]], None]
     RoutingStrategy = Callable[[List[str], Dict[str, Any]], Iterable[str]]
 
 
@@ -63,7 +62,6 @@ class App:
         self._post_task: Optional[PostTaskCallback] = None
         self._pre_send: Optional[PreSendCallback] = None
         self._post_send: Optional[PostSendCallback] = None
-        self._report_queue_stats: Optional[ReportQueueStatsCallback] = None
 
     def task(
         self,
@@ -191,24 +189,6 @@ class App:
         :return: The decorated function.
         """
         self._post_send = func
-        return func
-
-    def report_queue_stats(
-        self, func: ReportQueueStatsCallback
-    ) -> ReportQueueStatsCallback:
-        """
-        Decorator for registering a callback that is invoked periodically by the
-        :ref:`command line consumer<Command Line Consumer>`.
-
-        The callback takes two arguments:
-
-        - ``queue`` - A string indicating the queue that the stats are for.
-        - ``queue_stats`` - A dict containing attributes about the queue.
-
-        :param func: The function to be decorated.
-        :return: The decorated function.
-        """
-        self._report_queue_stats = func
         return func
 
     @functools.lru_cache()

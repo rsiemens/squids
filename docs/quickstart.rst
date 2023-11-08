@@ -105,7 +105,6 @@ run them. SQuidS includes a command line consumer which you can use to quickly s
       app = squids-example-app
       queue = squids-example
       workers = 8
-      report-interval = 300
       polling-wait-time = 5
       visibility-timeout = 30
       log-level = INFO

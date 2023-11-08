@@ -7,22 +7,16 @@ from squids.core import App, Task
 app = App("test", boto_config={"endpoint_url": "http://localhost:4566"})
 
 
-@app.report_queue_stats
-def reporter(queue: str, queue_stats: dict):
-    print(f"Queue stats for {queue}")
-    print(f"\tAvailable: {queue_stats['ApproximateNumberOfMessages']}")
-    print(f"\tDelayed: {queue_stats['ApproximateNumberOfMessagesDelayed']}")
-    print(f"\tIn flight: {queue_stats['ApproximateNumberOfMessagesNotVisible']}")
-
-
 @app.pre_send
 def before_send(queue: str, body: dict):
     print("Running before send hook")
+    print(queue, body)
 
 
 @app.post_send
 def after_send(queue: str, body: dict, response: dict):
     print("Running after send hook")
+    print(queue, body, response)
 
 
 @app.pre_task

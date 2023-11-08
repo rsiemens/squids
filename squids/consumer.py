@@ -179,7 +179,6 @@ def run_loop(
     app: App,
     queue_name: str,
     n_workers: int,
-    report_interval: int,
     polling_wait_time: int,
     visibility_timeout: int,
 ):
@@ -188,25 +187,11 @@ def run_loop(
     sqs_client = boto3.client("sqs", **app.boto_config)
     queue = app.get_queue_by_name(queue_name)
     consumer = Consumer(app, queue)
-    last_report_queue_stats = time.time()
 
     with ProcessPoolExecutor(
         max_workers=n_workers, initializer=initializer
     ) as executor:
         while not exit_handler.should_exit:
-            elapsed = time.time() - last_report_queue_stats
-            if elapsed >= report_interval and app._report_queue_stats is not None:
-                logger.info(
-                    f"Reporting queue stats after {elapsed:.2f} seconds",
-                    extra={"queue": queue.url, "report_interval": report_interval},
-                )
-
-                attrs = sqs_client.get_queue_attributes(
-                    QueueUrl=queue.url, AttributeNames=["All"]
-                )
-                app._report_queue_stats(queue_name, attrs["Attributes"])
-                last_report_queue_stats = time.time()
-
             if future_tracker.has_available_space:
                 for message in consumer.consume_messages(
                     options={
