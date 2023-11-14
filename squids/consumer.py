@@ -6,7 +6,7 @@ import time
 from concurrent.futures import Future, ProcessPoolExecutor
 from functools import partial
 from signal import SIG_IGN, SIGINT, SIGTERM, signal
-from typing import TYPE_CHECKING, Any, Dict, Hashable, Iterator, Optional, Set
+from typing import TYPE_CHECKING, Any, Callable, Dict, Hashable, Iterator, Optional, Set
 
 if TYPE_CHECKING:
     from mypy_boto3_sqs.type_defs import MessageTypeDef
@@ -169,9 +169,10 @@ def done_callback(
     future_tracker.remove(future)
 
 
-def initializer():
+def initializer(configure_logger):
     # Handles issue where KeyboardInterrupt isn't handled properly in child processes.
     signal(SIGINT, SIG_IGN)
+    configure_logger()
 
 
 def run_loop(
@@ -180,6 +181,7 @@ def run_loop(
     n_workers: int,
     polling_wait_time: int,
     visibility_timeout: int,
+    configure_logger: Callable,
 ):
     exit_handler = ExitHandler()
     future_tracker = ResourceTracker(limit=n_workers * 2)
@@ -187,7 +189,7 @@ def run_loop(
     consumer = Consumer(app, queue_url)
 
     with ProcessPoolExecutor(
-        max_workers=n_workers, initializer=initializer
+        max_workers=n_workers, initializer=initializer, initargs=(configure_logger,)
     ) as executor:
         while not exit_handler.should_exit:
             if future_tracker.has_available_space:

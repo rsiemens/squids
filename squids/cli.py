@@ -3,14 +3,13 @@ import importlib
 import logging
 import os
 import sys
+from functools import partial
 from textwrap import dedent
 
 from squids.consumer import run_loop
 
-
-def banner():
-    return dedent(
-        """\
+BANNER = dedent(
+    """\
 
                 /######   /######            /##       /##  /######
                /##__  ## /##__  ##          |__/      | ## /##__  ##
@@ -22,7 +21,7 @@ def banner():
                \______/  \____ ### \______/ |__/ \_______/ \______/
                               \__/
     """
-    )
+)
 
 
 def parse_args():
@@ -116,7 +115,7 @@ def run(args):
     app = import_app(args.app)
     task_names = [n for n in app._tasks]
 
-    print(banner())
+    print(BANNER)
     print(
         "[config]\n"
         f"  app = {app.name}\n"
@@ -142,6 +141,7 @@ def run(args):
         args.workers,
         args.polling_wait_time,
         args.visibility_timeout,
+        partial(configure_logger, args.log_level),
     )
 
 

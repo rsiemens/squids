@@ -1,7 +1,6 @@
 import random
 import time
 
-from squids import routing
 from squids.core import App, Task
 
 app = App("test", boto_config={"endpoint_url": "http://localhost:4566"})
@@ -68,18 +67,3 @@ def recursive_task(n):
     else:
         print(f"Running recursive task {n}")
         recursive_task.send(n - 1)
-
-
-@app.task(queue=["test", "special"], routing_strategy=routing.broadcast_strategy)
-def broadcast_task(msg):
-    print(msg)
-
-
-@app.task(queue=["test", "special", "other"])  # default random strategy
-def random_queue_task(msg):
-    print(msg)
-
-
-@app.task(queue=["test", "special", "other"], routing_strategy=routing.hash_strategy)
-def hash_queue_task(msg):
-    print(msg)
