@@ -6,12 +6,10 @@ import time
 from concurrent.futures import Future, ProcessPoolExecutor
 from functools import partial
 from signal import SIG_IGN, SIGINT, SIGTERM, signal
-from typing import TYPE_CHECKING, Dict, Hashable, Optional, Set
-
-import boto3
+from typing import TYPE_CHECKING, Dict, Hashable, Iterator, Optional, Set
 
 if TYPE_CHECKING:
-    from mypy_boto3_sqs.service_resource import Message, Queue
+    from mypy_boto3_sqs.type_defs import MessageTypeDef
 
     from squids import App
 
@@ -25,64 +23,70 @@ class Consumer:
     :meth:`.App.create_consumer` method instead of directly instantiating one yourself.
 
     :param app: An instance of :class:`.App`.
-    :param queue: An instance of `SQS.Queue <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#SQS.Queue>`_.
+    :param queue_url: The queue URL.
     """
 
-    def __init__(self, app: App, queue: Queue):
+    def __init__(self, app: App, queue_url: str):
         self.app = app
-        self.queue = queue
+        self.queue_url = queue_url
 
-    def _prepare_task(self, message: Message):
-        body = self.app._serde.deserialize(message.body)
+    def _prepare_task(self, message: MessageTypeDef):
+        body = self.app._serde.deserialize(message["Body"])
         task = self.app._tasks[body["task"]]
+        message_id = message["MessageId"]
 
         logger.info(
-            f"Received task: {task.name}[{message.message_id}]",
+            f"Received task: {task.name}[{message_id}]",
             extra={
-                "message_id": message.message_id,
+                "message_id": message_id,
                 "task": task.name,
-                "queue": self.queue.url,
+                "queue": self.queue_url,
             },
         )
-        return task, message.message_id, body["args"], body["kwargs"]
+        return task, message_id, body["args"], body["kwargs"]
 
-    def consume_messages(self, options: Optional[Dict] = None):
+    def consume_messages(
+        self, options: Optional[Dict] = None
+    ) -> Iterator[MessageTypeDef]:
         """
-        .. _SQS.Message: https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#message
-        .. _SQS.Queue.receive_messages: https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#SQS.Queue.receive_messages
+        .. _SQS.Client.receive_message: https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs/client/receive_message.html
 
         Consume messages from the associated queue. Unlike :meth:`.Consumer.consume` this method
-        returns a generator over all the `SQS.Message`_ s returned by calling
-        `SQS.Queue.receive_messages`_.
+        returns a generator over all the messages returned by calling `SQS.Client.receive_message`_.
 
-        :param options: A dict of optional values to pass to `SQS.Queue.receive_messages`_.
-        :return: A generator that yields `SQS.Message`_ s.
+        :param options: A dict of optional values to pass to `SQS.Client.receive_messages`_.
+        :return: A generator that yields message dicts.
         """
         if options is None:
             options = {}
 
-        messages = self.queue.receive_messages(**options)
-        for message in messages:
+        response = self.app.sqs.receive_message(QueueUrl=self.queue_url, **options)
+        for message in response.get("Messages", []):
             yield message
 
-    def consume(self, options: Optional[Dict] = None):
+    def consume(self, options: Optional[Dict] = None) -> None:
         """
-        .. _SQS.Queue.receive_messages: https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#SQS.Queue.receive_messages
+        .. _SQS.Client.receive_message: https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs/client/receive_message.html
 
         Consumes messages from the associated queue and runs the appropriate :class:`.Task` for
-        each message. Calling this only consumes as many messages as `SQS.Queue.receive_messages`_
+        each message. Calling this only consumes as many messages as `SQS.Client.receive_messages`_
         returns. If you want to consume continuously then you'll need to put calls to in a loop.
 
-        :param options: A dict of optional values to pass to `SQS.Queue.receive_messages`_.
+        :param options: A dict of optional values to pass to `SQS.Client.receive_messages`_.
         :return:
         """
         if options is None:
             options = {}
 
         for message in self.consume_messages(options):
-            task, message_id, args, kwargs = self._prepare_task(message)
-            task(message_id, *args, **kwargs)
-            message.delete()
+            self.run_task(message)
+
+    def run_task(self, message: MessageTypeDef) -> None:
+        task, message_id, args, kwargs = self._prepare_task(message)
+        task(message_id, *args, **kwargs)
+        self.app.sqs.delete_message(
+            QueueUrl=self.queue_url, ReceiptHandle=message["ReceiptHandle"]
+        )
 
 
 class ResourceLimitExceeded(Exception):
@@ -139,7 +143,7 @@ def done_callback(
     future_tracker: ResourceTracker,
     task_name: str,
     queue_url: str,
-    message: Message,
+    message: dict,
     future: Future,
 ):
     # this runs in the main loop process
@@ -149,19 +153,16 @@ def done_callback(
         logger.exception(
             "Task failed",
             extra={
-                "message_id": message.message_id,
+                "message_id": message["MessageId"],
                 "task": task_name,
                 "queue": queue_url,
             },
         )
     else:
-        # Q: is it ok to be doing these deletes in the main process instead of workers,
-        #    or is the latency from this going to cause to much blocking?
-        message.delete()
         logger.info(
-            f"Completed task: {task_name}[{message.message_id}]",
+            f"Completed task: {task_name}[{message['MessageId']}]",
             extra={
-                "message_id": message.message_id,
+                "message_id": message["MessageId"],
                 "task": task_name,
                 "queue": queue_url,
             },
@@ -184,9 +185,8 @@ def run_loop(
 ):
     exit_handler = ExitHandler()
     future_tracker = ResourceTracker(limit=n_workers * 2)
-    sqs_client = boto3.client("sqs", **app.boto_config)
-    queue = app.get_queue_by_name(queue_name)
-    consumer = Consumer(app, queue)
+    queue_url = app.get_queue_by_name(queue_name)
+    consumer = Consumer(app, queue_url)
 
     with ProcessPoolExecutor(
         max_workers=n_workers, initializer=initializer
@@ -202,15 +202,14 @@ def run_loop(
                         "VisibilityTimeout": visibility_timeout,
                     }
                 ):
-                    task, message_id, args, kwargs = consumer._prepare_task(message)
-                    future = executor.submit(task, message_id, *args, **kwargs)
+                    future = executor.submit(consumer.run_task, message)
                     future_tracker.add(future)
                     future.add_done_callback(
                         partial(
                             done_callback,
                             future_tracker,
-                            task.name,
-                            queue.url,
+                            "fix-me",
+                            queue_url,
                             message,
                         )
                     )

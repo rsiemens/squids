@@ -51,7 +51,7 @@ class ResourceTrackerTestCases(unittest.TestCase):
         self.assertFalse(tracker.has_available_space)
 
 
-@patch("squids.core.boto3")
+@patch("squids.core.boto3.client")
 class ConsumeTestCases(unittest.TestCase):
     def test_prepare_task(self, _):
         app = App("test")
@@ -63,9 +63,9 @@ class ConsumeTestCases(unittest.TestCase):
             "kwargs": {},
         }
 
-        consumer = Consumer(app, Mock())
+        consumer = Consumer(app, "http://fake/queue")
         task, message_id, args, kwargs = consumer._prepare_task(
-            Mock(message_id="123", body=json.dumps(body))
+            {"MessageId": "123", "Body": json.dumps(body)}
         )
 
         self.assertEqual(task, fake_task)
@@ -88,9 +88,9 @@ class ConsumeTestCases(unittest.TestCase):
         fake_task = Mock()
         app._tasks["fake_task"] = fake_task
 
-        consumer = Consumer(app, Mock())
+        consumer = Consumer(app, "http://fake/queue")
         task, message_id, args, kwargs = consumer._prepare_task(
-            Mock(message_id="123", body="I'm serialized")
+            {"MessageId": "123", "Body": "I'm serialized"}
         )
 
         self.assertEqual(task, fake_task)
@@ -99,9 +99,9 @@ class ConsumeTestCases(unittest.TestCase):
         self.assertEqual(kwargs, {})
 
     def test_consume_messages(self, _):
-        mock_queue = Mock()
-        mock_queue.receive_messages.return_value = [1, 2, 3]
-        consumer = Consumer(Mock(), mock_queue)
+        app = App("unittests")
+        app.sqs.receive_message.return_value = {"Messages": [1, 2, 3]}
+        consumer = Consumer(app, "http://fake/queue")
 
         self.assertEqual([m for m in consumer.consume_messages()], [1, 2, 3])
 
@@ -114,14 +114,15 @@ class ConsumeTestCases(unittest.TestCase):
             "args": (1, "a"),
             "kwargs": {},
         }
-        mock_queue = Mock()
-        mock_queue.receive_messages.return_value = [
-            Mock(message_id="1", body=json.dumps(body)),
-            Mock(message_id="2", body=json.dumps(body)),
-            Mock(message_id="3", body=json.dumps(body)),
-        ]
+        app.sqs.receive_message.return_value = {
+            "Messages": [
+                {"MessageId": "1", "ReceiptHandle": "1", "Body": json.dumps(body)},
+                {"MessageId": "2", "ReceiptHandle": "2", "Body": json.dumps(body)},
+                {"MessageId": "3", "ReceiptHandle": "3", "Body": json.dumps(body)},
+            ]
+        }
 
-        consumer = Consumer(app, mock_queue)
+        consumer = Consumer(app, "http://fake/queue")
         consumer.consume()
 
         self.assertEqual(fake_task.call_count, 3)

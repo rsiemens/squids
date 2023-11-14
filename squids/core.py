@@ -24,8 +24,6 @@ from squids.consumer import Consumer
 from squids.serde import JSONSerde, Serde
 
 if TYPE_CHECKING:
-    from mypy_boto3_sqs.literals import QueueAttributeNameType
-    from mypy_boto3_sqs.service_resource import Queue
     from mypy_boto3_sqs.type_defs import SendMessageResultTypeDef
 
     PreTaskCallback = Callable[[Task], None]
@@ -41,7 +39,7 @@ class App:
 
     :param name: An identifier for the application.
     :param boto_config: An optional configuration dict which takes the same values as
-        `boto3.session.Session.resource <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/core/session.html#boto3.session.Session.resource>`_.
+        `boto3.session.Session.client <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/core/session.html#boto3.session.Session.client>`_.
     :param serde: An optional :class:`.Serde` subclass that is used to serialize and deserialize
         message bodies when sending and consuming. If not provided, :class:`.JSONSerde` will be
         used.
@@ -55,7 +53,7 @@ class App:
     ):
         self.name = name
         self.boto_config = boto_config or {}
-        self.sqs = boto3.resource("sqs", **self.boto_config)
+        self.sqs = boto3.client("sqs", **self.boto_config)
         self._serde = serde
         self._tasks: Dict[str, Task] = {}
         self._pre_task: Optional[PreTaskCallback] = None
@@ -183,7 +181,7 @@ class App:
         - ``queue`` - A string indicating the queue the message will be sent to.
         - ``body`` - The dict that was serialized and sent into the queue.
         - ``response`` - A dict response which is the return value from
-            `SQS.Queue.send_message <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#SQS.Queue.send_message>`_.
+            `SQS.Client.send_message <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs/client/send_message.html>`_.
 
         :param func: The function to be decorated.
         :return: The decorated function.
@@ -192,15 +190,14 @@ class App:
         return func
 
     @functools.lru_cache()
-    def get_queue_by_name(self, queue_name: str) -> Queue:
+    def get_queue_by_name(self, queue_name: str) -> str:
         """
-        A convenience method for getting an `SQS.Queue <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#queue>`_
-        by queue name.
+        A convenience method for getting a queue URL by name.
 
         :param queue_name: A string identifying the queue.
-        :return: An instance of `SQS.Queue <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#queue>`_.
+        :return: The queue URL.
         """
-        return self.sqs.get_queue_by_name(QueueName=queue_name)
+        return self.sqs.get_queue_url(QueueName=queue_name)["QueueUrl"]
 
     def create_consumer(self, queue_name: str) -> Consumer:
         """
@@ -209,8 +206,8 @@ class App:
         :param queue_name: A string identifying the queue.
         :return: An instance of :class:`.Consumer`.
         """
-        queue = self.get_queue_by_name(queue_name)
-        return Consumer(self, queue)
+        queue_url = self.get_queue_by_name(queue_name)
+        return Consumer(self, queue_url)
 
     def __getstate__(self):
         state = {**self.__dict__}
@@ -218,8 +215,8 @@ class App:
         return state
 
     def __setstate__(self, state):
-        state["sqs"] = boto3.resource("sqs", **state["boto_config"])
-        return state
+        state["sqs"] = boto3.client("sqs", **state["boto_config"])
+        self.__dict__ = state
 
 
 class Task:
@@ -263,8 +260,6 @@ class Task:
         self.func = func
         self.pre_task = pre_task
         self.post_task = post_task
-        # NB: This isn't available on the consumer side because of pickling.
-        #  see the note in __getstate__
         self.app = app
         self.signature = inspect.signature(func if func else self.run)
         # set on the consumer side via __call__
@@ -278,17 +273,17 @@ class Task:
         queue: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
-        .. _SQS.Queue.send_message: https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#SQS.Queue.send_message
+        .. _SQS.Client.send_message: https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs/client/send_message.html
 
         Send a task into the associated SQS queue.
 
         :param args: Positional arguments for the task.
         :param kwargs: Keyword arguments for the task.
         :param options: A dict of optional arguments when sending into the queue. Takes the same
-            values as `SQS.Queue.send_message`_ minus the ``MessageBody``.
+            values as `SQS.Client.send_message`_ minus the ``MessageBody``.
         :param queue: Forces sending a message to specific queue regardless of ``routing_strategy``.
         :return: List of dicts containing the queue name and the response from SQS which is the same
-            returned by `SQS.Queue.send_message`_.
+            returned by `SQS.Client.send_message`_.
         """
         if options is None:
             options = {}
@@ -317,14 +312,16 @@ class Task:
 
         responses = []
         for queue_name in target_queues:
-            sqs_queue = self.app.get_queue_by_name(queue_name)
+            queue_url = self.app.get_queue_by_name(queue_name)
 
             if self.app._pre_send is not None:
                 self.app._pre_send(queue_name, body)
 
             # encoder plugin
-            response = sqs_queue.send_message(
-                MessageBody=self.app._serde.serialize(body), **options
+            response = self.app.sqs.send_message(
+                QueueUrl=queue_url,
+                MessageBody=self.app._serde.serialize(body),
+                **options,
             )
             responses.append({"queue": queue_name, "sqs_response": response})
 
@@ -341,7 +338,7 @@ class Task:
         :param args: Positional arguments for the task.
         :param kwargs: Keyword arguments for the task.
         :return: List of dicts containing the queue name and the response from SQS which is the same
-            returned by `SQS.Queue.send_message <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#SQS.Queue.send_message>`_.
+            returned by `SQS.Client.send_message <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs/client/send_message.html>`_.
         """
         return self.send_job(args, kwargs)
 
@@ -356,12 +353,6 @@ class Task:
         """
         if self.func is not None:
             return self.func(*args, **kwargs)
-
-    def __getstate__(self):
-        state = {**self.__dict__}
-        # We only need the `app` for sending to SQS.
-        state.pop("app")
-        return state
 
     def __call__(self, message_id: str, *args, **kwargs) -> Any:
         self.id = message_id
