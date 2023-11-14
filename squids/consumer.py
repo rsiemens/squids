@@ -6,7 +6,7 @@ import time
 from concurrent.futures import Future, ProcessPoolExecutor
 from functools import partial
 from signal import SIG_IGN, SIGINT, SIGTERM, signal
-from typing import TYPE_CHECKING, Dict, Hashable, Iterator, Optional, Set
+from typing import TYPE_CHECKING, Any, Dict, Hashable, Iterator, Optional, Set
 
 if TYPE_CHECKING:
     from mypy_boto3_sqs.type_defs import MessageTypeDef
@@ -35,14 +35,6 @@ class Consumer:
         task = self.app._tasks[body["task"]]
         message_id = message["MessageId"]
 
-        logger.info(
-            f"Received task: {task.name}[{message_id}]",
-            extra={
-                "message_id": message_id,
-                "task": task.name,
-                "queue": self.queue_url,
-            },
-        )
         return task, message_id, body["args"], body["kwargs"]
 
     def consume_messages(
@@ -54,7 +46,7 @@ class Consumer:
         Consume messages from the associated queue. Unlike :meth:`.Consumer.consume` this method
         returns a generator over all the messages returned by calling `SQS.Client.receive_message`_.
 
-        :param options: A dict of optional values to pass to `SQS.Client.receive_messages`_.
+        :param options: A dict of optional values to pass to `SQS.Client.receive_message`_.
         :return: A generator that yields message dicts.
         """
         if options is None:
@@ -69,10 +61,10 @@ class Consumer:
         .. _SQS.Client.receive_message: https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs/client/receive_message.html
 
         Consumes messages from the associated queue and runs the appropriate :class:`.Task` for
-        each message. Calling this only consumes as many messages as `SQS.Client.receive_messages`_
+        each message. Calling this only consumes as many messages as `SQS.Client.receive_message`_
         returns. If you want to consume continuously then you'll need to put calls to in a loop.
 
-        :param options: A dict of optional values to pass to `SQS.Client.receive_messages`_.
+        :param options: A dict of optional values to pass to `SQS.Client.receive_message`_.
         :return:
         """
         if options is None:
@@ -81,12 +73,43 @@ class Consumer:
         for message in self.consume_messages(options):
             self.run_task(message)
 
-    def run_task(self, message: MessageTypeDef) -> None:
+    def run_task(self, message: MessageTypeDef) -> Any:
         task, message_id, args, kwargs = self._prepare_task(message)
-        task(message_id, *args, **kwargs)
+        logger.info(
+            f"Received task: {task.name}[{message_id}]",
+            extra={
+                "message_id": message_id,
+                "task": task.name,
+                "queue": self.queue_url,
+            },
+        )
+
+        try:
+            result = task(message_id, *args, **kwargs)
+        except Exception as e:
+            logger.exception(
+                "Task failed",
+                extra={
+                    "message_id": message_id,
+                    "task": task.name,
+                    "queue": self.queue_url,
+                },
+            )
+            raise e
+
+        logger.info(
+            f"Completed task: {task.name}[{message_id}]",
+            extra={
+                "message_id": message_id,
+                "task": task.name,
+                "queue": self.queue_url,
+            },
+        )
+        # should this delete on exception?
         self.app.sqs.delete_message(
             QueueUrl=self.queue_url, ReceiptHandle=message["ReceiptHandle"]
         )
+        return result
 
 
 class ResourceLimitExceeded(Exception):
@@ -141,34 +164,9 @@ class ExitHandler:
 
 def done_callback(
     future_tracker: ResourceTracker,
-    task_name: str,
-    queue_url: str,
-    message: dict,
     future: Future,
 ):
-    # this runs in the main loop process
-    try:
-        future.result()
-    except Exception:
-        logger.exception(
-            "Task failed",
-            extra={
-                "message_id": message["MessageId"],
-                "task": task_name,
-                "queue": queue_url,
-            },
-        )
-    else:
-        logger.info(
-            f"Completed task: {task_name}[{message['MessageId']}]",
-            extra={
-                "message_id": message["MessageId"],
-                "task": task_name,
-                "queue": queue_url,
-            },
-        )
-    finally:
-        future_tracker.remove(future)
+    future_tracker.remove(future)
 
 
 def initializer():
@@ -208,9 +206,6 @@ def run_loop(
                         partial(
                             done_callback,
                             future_tracker,
-                            "fix-me",
-                            queue_url,
-                            message,
                         )
                     )
             else:

@@ -114,7 +114,7 @@ def configure_logger(level):
 def run(args):
     configure_logger(args.log_level)
     app = import_app(args.app)
-    task_names = [n for n, t in app._tasks.items() if args.queue in t.queues]
+    task_names = [n for n in app._tasks]
 
     print(banner())
     print(
@@ -128,7 +128,7 @@ def run(args):
     )
 
     if not task_names:
-        print(f'No tasks registered for queue "{args.queue}"', file=sys.stderr)
+        print(f"No tasks registered", file=sys.stderr)
         return
 
     print("[tasks]")

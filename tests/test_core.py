@@ -4,7 +4,6 @@ import unittest
 from unittest.mock import Mock, patch
 
 from squids import App, Task
-from squids.routing import broadcast_strategy, random_strategy
 from squids.serde import JSONSerde, Serde
 
 
@@ -30,39 +29,9 @@ class AppTestCases(unittest.TestCase):
         self.assertEqual(
             task.name, "tests.test_core.AppTestCases.test_task.<locals>.test_task"
         )
-        self.assertEqual(task.queues, ["test-queue"])
-        self.assertEqual(task.routing_strategy, random_strategy)
+        self.assertEqual(task.queue, "test-queue")
         self.assertEqual(task.func, test_task)
         self.assertEqual(task.send, test_task.send)
-
-    def test_task__multiple_queues(self, _):
-        app = App("unittests")
-
-        @app.task(["test-queue1", "test-queue2"], routing_strategy=broadcast_strategy)
-        def test_task():
-            pass
-
-        task = app._tasks[
-            "tests.test_core.AppTestCases.test_task__multiple_queues.<locals>.test_task"
-        ]
-        self.assertEqual(task.queues, ["test-queue1", "test-queue2"])
-        self.assertEqual(task.routing_strategy, broadcast_strategy)
-
-    def test_task__custom_routing_strategy(self, _):
-        app = App("unittests")
-
-        def first(queues, payload):
-            return queues[0]
-
-        @app.task(["test-queue1", "test-queue2"], routing_strategy=first)
-        def test_task():
-            pass
-
-        task = app._tasks[
-            "tests.test_core.AppTestCases.test_task__custom_routing_strategy.<locals>.test_task"
-        ]
-        self.assertEqual(task.queues, ["test-queue1", "test-queue2"])
-        self.assertEqual(task.routing_strategy, first)
 
     def test_add_task(self, _):
         app = App("unittests")
@@ -187,15 +156,7 @@ class TaskTestCases(unittest.TestCase):
         def dummy_job(arg1, kwarg1=None):
             self.fail("dummy_job shouldn't be called on `delay`")
 
-        task = Task(app, ["q1", "q2", "q3"], func=dummy_job)
-
-        # can't force sending to a queue that isn't listed for the task
-        with self.assertRaises(ValueError):
-            task.send_job(
-                args=("arg1val",),
-                kwargs={"kwarg1": "kwarg1val"},
-                queue="q4",
-            )
+        task = Task(app, "q1", func=dummy_job)
 
         task.send_job(
             args=("arg1val",),
@@ -211,34 +172,6 @@ class TaskTestCases(unittest.TestCase):
                     "kwargs": {},
                 }
             ),
-        )
-
-    def test_send_job_calls_routing_strategy(self, _):
-        app = App("unittests")
-        queue_url = "http://fake/queue"
-        app.sqs.get_queue_url.return_value = {"QueueUrl": queue_url}
-
-        routing_mock = Mock()
-        routing_mock.return_value = ["q3"]
-
-        def dummy_job(arg1, kwarg1=None):
-            self.fail("dummy_job shouldn't be called on `delay`")
-
-        task = Task(
-            app, ["q1", "q2", "q3"], routing_strategy=routing_mock, func=dummy_job
-        )
-        task.send_job(
-            args=("arg1val",),
-            kwargs={"kwarg1": "kwarg1val"},
-        )
-        msg_body = {
-            "task": "tests.test_core.TaskTestCases.test_send_job_calls_routing_strategy.<locals>.dummy_job",
-            "args": ("arg1val", "kwarg1val"),
-            "kwargs": {},
-        }
-        routing_mock.assert_called_once_with(["q1", "q2", "q3"], msg_body)
-        app.sqs.send_message.assert_called_once_with(
-            QueueUrl=queue_url, MessageBody=json.dumps(msg_body)
         )
 
     def test_send_job_uses_app_serde_to_serialize(self, _):
@@ -336,13 +269,13 @@ class TaskTestCases(unittest.TestCase):
         def before_task(task):
             hook_call_order.append("pre_task")
 
-            self.assertEqual(task.queues, ["test-queue"])
+            self.assertEqual(task.queue, "test-queue")
             self.assertEqual(task.id, message_id)
 
         def after_task(task):
             hook_call_order.append("post_task")
 
-            self.assertEqual(task.queues, ["test-queue"])
+            self.assertEqual(task.queue, "test-queue")
             self.assertEqual(task.id, message_id)
 
         task = Task(

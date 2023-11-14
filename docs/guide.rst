@@ -7,7 +7,7 @@ Application
 The :class:`squids.App` serves as the central object for configuration, registering tasks, and creating consumers. It is
 also responsible for knowing how to connect to SQS. It takes several arguments, but the ones you will use most often are
 ``name`` and ``boto_config``, the later of which is optional. ``name`` is a string identifier for your application while
-``boto_config`` is a dictionary of configuration values that are passed to `boto3.session.Session.resource <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/core/session.html#boto3.session.Session.resource>`_.
+``boto_config`` is a dictionary of configuration values that are passed to `boto3.session.Session.client <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/core/session.html#boto3.session.Session.client>`_.
 
 .. code-block:: python
 
@@ -22,7 +22,7 @@ tasks, and consuming tasks. Registering a task looks like this:
 .. code-block:: python
 
     @app.task("emails")
-    def email_customer(to_addr, from_addr, body):
+    def email_customer(to_addr, body):
         ...
 
 This will register the ``email_customer`` function as a task with the app. The :meth:`.App.task`
@@ -36,18 +36,18 @@ specified queue using :meth:`.Task.send` or :meth:`.Task.send_job` as demonstrat
 
 .. code-block:: python
 
-    email_customer.send("foo@domain.com", "bar@domain.com", "Hello!")
+    email_customer.send("foo@domain.com", "Hello!")
     email_customer.send_job(
-        args=("foo@domain.com", "bar@domain.com", "Hello!"),
+        args=("foo@domain.com", "Hello!"),
         kwargs={},
         options={"DelaySeconds": 5}
     )
 
 Calling ``send`` or ``send_job`` will ensure that any arguments and keyword arguments match the
 signature of the function. If they don't a ``TypeError`` will be raised. Both ``send`` and ``send_job``
-will return a response of the same form, a `SQS.Queue.send_message <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#SQS.Queue.send_message>`_.
+will return a response of the same form, a `SQS.Client.send_message <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs/client/send_message.html>`_.
 The difference between ``send`` and ``send_job`` is that ``send_job`` also accepts an ``options``
-dict which accepts all the same arguments as `SQS.Queue.send_message <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#SQS.Queue.send_message>`_
+dict which accepts all the same arguments as `SQS.Client.send_message <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs/client/send_message.html>`_
 except for the ``MessageBody``.
 
     When you send a task it will, by default, serialize the arguments and keyword arguments using `json <https://docs.python.org/3/library/json.html>`_.
@@ -59,7 +59,7 @@ You can still run your functions synchronously if you want.
 
 .. code-block:: python
 
-    email_customer("foo@domain.com", "bar@domain.com", "Hello!")
+    email_customer("foo@domain.com", "Hello!")
 
 Doing this will **not** send a task through the SQS queue, but instead simply call the function and
 execute it in the calling process like normal.
@@ -67,7 +67,7 @@ execute it in the calling process like normal.
 Consuming Tasks
 ---------------
 
-Once you have sent a task into an SQS queue you'll likely want run it eventually. To run the task
+Once you have sent a task into an SQS queue you'll likely want to run it eventually. To run the task
 you need to consume it. We can get a consumer for a queue by calling :meth:`.App.create_consumer`.
 ``create_consumer`` takes a single argument which is the queue name. Once we have the consumer we
 can begin to consume and run our tasks like so:
@@ -82,11 +82,11 @@ can begin to consume and run our tasks like so:
 
 :meth:`.Consumer.consume` will fetch messages from the ``emails`` SQS queue and run the function
 associated with each received message. In our case it'll run the ``email_customer`` function. The
-``options`` keyword argument is an optional dict that takes the same values as `SQS.Queue.receive_messages <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs.html#SQS.Queue.receive_messages>`_.
+``options`` keyword argument is an optional dict that takes the same values as `SQS.Client.receive_message <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sqs/client/receive_message.html>`_.
 
 Often you'll want to be consuming your tasks in another process to keep from blocking your main
-program. In those cases you can look at using the ``squids`` :ref:`command line consumer<Command Line Consumer>` tool which makes
-this task easy.
+program. If you don't want to build your own consumer clients you can look at using the ``squids`` :ref:`command line consumer<Command Line Consumer>`
+tool which makes simple consuming of tasks easy.
 
 Application Hooks
 -----------------
