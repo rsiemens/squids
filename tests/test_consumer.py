@@ -134,3 +134,10 @@ class ConsumeTestCases(unittest.TestCase):
                 call("3", 1, "a"),
             ],
         )
+        app.sqs.delete_message.assert_has_calls(
+            [
+                call(QueueUrl=consumer.queue_url, ReceiptHandle="1"),
+                call(QueueUrl=consumer.queue_url, ReceiptHandle="2"),
+                call(QueueUrl=consumer.queue_url, ReceiptHandle="3"),
+            ]
+        )

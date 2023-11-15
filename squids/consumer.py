@@ -37,6 +37,11 @@ class Consumer:
 
         return task, message_id, body["args"], body["kwargs"]
 
+    def _delete(self, message: MessageTypeDef) -> None:
+        self.app.sqs.delete_message(
+            QueueUrl=self.queue_url, ReceiptHandle=message["ReceiptHandle"]
+        )
+
     def consume_messages(
         self, options: Optional[Dict] = None
     ) -> Iterator[MessageTypeDef]:
@@ -84,6 +89,9 @@ class Consumer:
             },
         )
 
+        if not self.app._delete_late:
+            self._delete(message)
+
         try:
             result = task(message_id, *args, **kwargs)
         except Exception as e:
@@ -97,6 +105,9 @@ class Consumer:
             )
             raise e
 
+        if self.app._delete_late:
+            self._delete(message)
+
         logger.info(
             f"Completed task: {task.name}[{message_id}]",
             extra={
@@ -104,10 +115,6 @@ class Consumer:
                 "task": task.name,
                 "queue": self.queue_url,
             },
-        )
-        # should this delete on exception?
-        self.app.sqs.delete_message(
-            QueueUrl=self.queue_url, ReceiptHandle=message["ReceiptHandle"]
         )
         return result
 

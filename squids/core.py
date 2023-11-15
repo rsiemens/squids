@@ -29,6 +29,13 @@ class App:
     :param serde: An optional :class:`.Serde` subclass that is used to serialize and deserialize
         message bodies when sending and consuming. If not provided, :class:`.JSONSerde` will be
         used.
+    :param delete_late: An optional boolean that determines when a message is deleted from SQS. If
+        the value is ``True`` then the message is deleted *after* processing the task. This means an
+        unhandled exception in the task could lead to the message not being deleted and
+        re-delivered when the visibility timeout expires. It also means a task must finish
+        processing it's task within the visibility timeout window or it could be re-delivered.
+        The default value of ``False`` is generally encouraged unless your tasks are idempotent or you
+        have appropriate DLQ handling and or de-duping configured.
     """
 
     def __init__(
@@ -36,11 +43,13 @@ class App:
         name: str,
         boto_config: Optional[Dict] = None,
         serde: Type[Serde] = JSONSerde,
+        delete_late: bool = False,
     ):
         self.name = name
         self.boto_config = boto_config or {}
         self.sqs = boto3.client("sqs", **self.boto_config)
         self._serde = serde
+        self._delete_late = delete_late
         self._tasks: Dict[str, Task] = {}
         self._pre_task: Optional[PreTaskCallback] = None
         self._post_task: Optional[PostTaskCallback] = None
