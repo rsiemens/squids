@@ -4,11 +4,10 @@ import unittest
 from unittest.mock import Mock, patch
 
 from squids import App, Task
-from squids.routing import broadcast_strategy, random_strategy
 from squids.serde import JSONSerde, Serde
 
 
-@patch("squids.core.boto3")
+@patch("squids.core.boto3.client")
 class AppTestCases(unittest.TestCase):
     def test_init(self, _):
         app = App("unittests")
@@ -30,39 +29,9 @@ class AppTestCases(unittest.TestCase):
         self.assertEqual(
             task.name, "tests.test_core.AppTestCases.test_task.<locals>.test_task"
         )
-        self.assertEqual(task.queues, ["test-queue"])
-        self.assertEqual(task.routing_strategy, random_strategy)
+        self.assertEqual(task.queue, "test-queue")
         self.assertEqual(task.func, test_task)
         self.assertEqual(task.send, test_task.send)
-
-    def test_task__multiple_queues(self, _):
-        app = App("unittests")
-
-        @app.task(["test-queue1", "test-queue2"], routing_strategy=broadcast_strategy)
-        def test_task():
-            pass
-
-        task = app._tasks[
-            "tests.test_core.AppTestCases.test_task__multiple_queues.<locals>.test_task"
-        ]
-        self.assertEqual(task.queues, ["test-queue1", "test-queue2"])
-        self.assertEqual(task.routing_strategy, broadcast_strategy)
-
-    def test_task__custom_routing_strategy(self, _):
-        app = App("unittests")
-
-        def first(queues, payload):
-            return queues[0]
-
-        @app.task(["test-queue1", "test-queue2"], routing_strategy=first)
-        def test_task():
-            pass
-
-        task = app._tasks[
-            "tests.test_core.AppTestCases.test_task__custom_routing_strategy.<locals>.test_task"
-        ]
-        self.assertEqual(task.queues, ["test-queue1", "test-queue2"])
-        self.assertEqual(task.routing_strategy, first)
 
     def test_add_task(self, _):
         app = App("unittests")
@@ -120,26 +89,17 @@ class AppTestCases(unittest.TestCase):
 
         self.assertEqual(app._post_send, after_send)
 
-    def test_report_queue_stats(self, _):
-        app = App("unittests")
-
-        @app.report_queue_stats
-        def report_stats(queue, stats):
-            pass
-
-        self.assertEqual(app._report_queue_stats, report_stats)
-
 
 def dummy_task():
     pass
 
 
-@patch("squids.core.boto3")
+@patch("squids.core.boto3.client")
 class TaskTestCases(unittest.TestCase):
     def test_send(self, _):
         app = App("unittests")
-        mock_queue = Mock()
-        app.sqs.get_queue_by_name.return_value = mock_queue
+        queue_url = "http://fake/queue"
+        app.sqs.get_queue_url.return_value = {"QueueUrl": queue_url}
 
         def dummy_job(arg1, kwarg1=None):
             self.fail("dummy_job shouldn't be called on `send`")
@@ -150,20 +110,21 @@ class TaskTestCases(unittest.TestCase):
             task.send(kwarg1="kwarg1")
 
         task.send("arg1val", kwarg1="kwarg1val")
-        mock_queue.send_message.assert_called_once_with(
+        app.sqs.send_message.assert_called_once_with(
+            QueueUrl=queue_url,
             MessageBody=json.dumps(
                 {
                     "task": "tests.test_core.TaskTestCases.test_send.<locals>.dummy_job",
                     "args": ["arg1val", "kwarg1val"],
                     "kwargs": {},
                 }
-            )
+            ),
         )
 
     def test_send_job(self, _):
         app = App("unittests")
-        mock_queue = Mock()
-        app.sqs.get_queue_by_name.return_value = mock_queue
+        queue_url = "http://fake/queue"
+        app.sqs.get_queue_url.return_value = {"QueueUrl": queue_url}
 
         def dummy_job(arg1, kwarg1=None):
             self.fail("dummy_job shouldn't be called on `delay`")
@@ -175,7 +136,8 @@ class TaskTestCases(unittest.TestCase):
             kwargs={"kwarg1": "kwarg1val"},
             options={"DelaySeconds": 10},
         )
-        mock_queue.send_message.assert_called_once_with(
+        app.sqs.send_message.assert_called_once_with(
+            QueueUrl=queue_url,
             MessageBody=json.dumps(
                 {
                     "task": "tests.test_core.TaskTestCases.test_send_job.<locals>.dummy_job",
@@ -188,63 +150,28 @@ class TaskTestCases(unittest.TestCase):
 
     def test_send_job_queue_override(self, _):
         app = App("unittests")
-        mock_queue = Mock()
-        app.sqs.get_queue_by_name.return_value = mock_queue
+        queue_url = "http://fake/queue"
+        app.sqs.get_queue_url.return_value = {"QueueUrl": queue_url}
 
         def dummy_job(arg1, kwarg1=None):
             self.fail("dummy_job shouldn't be called on `delay`")
 
-        task = Task(app, ["q1", "q2", "q3"], func=dummy_job)
-
-        # can't force sending to a queue that isn't listed for the task
-        with self.assertRaises(ValueError):
-            task.send_job(
-                args=("arg1val",),
-                kwargs={"kwarg1": "kwarg1val"},
-                queue="q4",
-            )
+        task = Task(app, "q1", func=dummy_job)
 
         task.send_job(
             args=("arg1val",),
             kwargs={"kwarg1": "kwarg1val"},
             queue="q2",
         )
-        mock_queue.send_message.assert_called_once_with(
+        app.sqs.send_message.assert_called_once_with(
+            QueueUrl=queue_url,
             MessageBody=json.dumps(
                 {
                     "task": "tests.test_core.TaskTestCases.test_send_job_queue_override.<locals>.dummy_job",
                     "args": ["arg1val", "kwarg1val"],
                     "kwargs": {},
                 }
-            )
-        )
-
-    def test_send_job_calls_routing_strategy(self, _):
-        app = App("unittests")
-        mock_queue = Mock()
-        app.sqs.get_queue_by_name.return_value = mock_queue
-
-        routing_mock = Mock()
-        routing_mock.return_value = ["q3"]
-
-        def dummy_job(arg1, kwarg1=None):
-            self.fail("dummy_job shouldn't be called on `delay`")
-
-        task = Task(
-            app, ["q1", "q2", "q3"], routing_strategy=routing_mock, func=dummy_job
-        )
-        task.send_job(
-            args=("arg1val",),
-            kwargs={"kwarg1": "kwarg1val"},
-        )
-        msg_body = {
-            "task": "tests.test_core.TaskTestCases.test_send_job_calls_routing_strategy.<locals>.dummy_job",
-            "args": ("arg1val", "kwarg1val"),
-            "kwargs": {},
-        }
-        routing_mock.assert_called_once_with(["q1", "q2", "q3"], msg_body)
-        mock_queue.send_message.assert_called_once_with(
-            MessageBody=json.dumps(msg_body)
+            ),
         )
 
     def test_send_job_uses_app_serde_to_serialize(self, _):
@@ -261,8 +188,8 @@ class TaskTestCases(unittest.TestCase):
                 return "I'm serialized"
 
         app = App("unittests", serde=DumbSerde)
-        mock_queue = Mock()
-        app.sqs.get_queue_by_name.return_value = mock_queue
+        queue_url = "http://fake/queue"
+        app.sqs.get_queue_url.return_value = {"QueueUrl": queue_url}
 
         def dummy_job(arg1, kwarg1=None):
             self.fail("dummy_job shouldn't be called on `delay`")
@@ -273,7 +200,8 @@ class TaskTestCases(unittest.TestCase):
             args=("arg1val",),
             kwargs={"kwarg1": "kwarg1val"},
         )
-        mock_queue.send_message.assert_called_once_with(
+        app.sqs.send_message.assert_called_once_with(
+            QueueUrl=queue_url,
             MessageBody="I'm serialized",
         )
 
@@ -325,12 +253,10 @@ class TaskTestCases(unittest.TestCase):
     def test_pickle_task(self, _):
         app = App("unittests")
 
-        task = Task(app, "test-queue", func=dummy_task)
+        task = Task(app, "http://fake/test-queue", func=dummy_task)
         unpickled_task = pickle.loads(pickle.dumps(task))
 
-        self.assertEqual(task.app, app)
-        with self.assertRaises(AttributeError):
-            unpickled_task.app
+        self.assertTrue(hasattr(unpickled_task.app, "sqs"))
 
     def test_call(self, _):
         app = App("unittests")
@@ -343,13 +269,13 @@ class TaskTestCases(unittest.TestCase):
         def before_task(task):
             hook_call_order.append("pre_task")
 
-            self.assertEqual(task.queues, ["test-queue"])
+            self.assertEqual(task.queue, "test-queue")
             self.assertEqual(task.id, message_id)
 
         def after_task(task):
             hook_call_order.append("post_task")
 
-            self.assertEqual(task.queues, ["test-queue"])
+            self.assertEqual(task.queue, "test-queue")
             self.assertEqual(task.id, message_id)
 
         task = Task(

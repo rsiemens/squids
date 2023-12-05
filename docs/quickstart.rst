@@ -19,6 +19,7 @@ Now we can start building our little application. Open up your editor of choice 
 
     app = App("squids-example-app")
 
+
     @app.task(queue="squids-example")
     def download_repo(repo, branch):
         with requests.get(
@@ -29,6 +30,7 @@ Now we can start building our little application. Open up your editor of choice 
                 for chunk in res.iter_content(chunk_size=8192):
                     f.write(chunk)
         print(f"Download for {repo} complete")
+
 
     if __name__ == "__main__":
         res = requests.get("https://api.github.com/orgs/django/repos")
@@ -43,7 +45,7 @@ Let's quickly go over what this does starting at the top.
     app = App("squids-example-app")
 
 This creates an instance of our SQuidS application, called ``squids-example-app``, which holds all the tasks we register and knows
-how to communicate with SQS. It also takes an optional ``boto_config`` keyword argument which is a dictionary that takes the same values as `boto3.session.Session.resource <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/core/session.html#boto3.session.Session.resource>`_.
+how to communicate with SQS. It also takes an optional ``boto_config`` keyword argument which is a dictionary that takes the same values as `boto3.session.Session.client <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/core/session.html#boto3.session.Session.client>`_.
 
 .. code-block:: python
 
@@ -89,7 +91,7 @@ Let's go ahead and run it. ::
 Nice! Our tasks have been sent to the squids-example queue, but now we need a way to consume and
 run them. SQuidS includes a command line consumer which you can use to quickly start consuming tasks. ::
 
-    $ squids --queue squids-example  --app example:app
+    $ squids --queue squids-example --app example:app
 
       /######   /######            /##       /##  /######
      /##__  ## /##__  ##          |__/      | ## /##__  ##
@@ -105,7 +107,6 @@ run them. SQuidS includes a command line consumer which you can use to quickly s
       app = squids-example-app
       queue = squids-example
       workers = 8
-      report-interval = 300
       polling-wait-time = 5
       visibility-timeout = 30
       log-level = INFO

@@ -3,14 +3,13 @@ import importlib
 import logging
 import os
 import sys
+from functools import partial
 from textwrap import dedent
 
 from squids.consumer import run_loop
 
-
-def banner():
-    return dedent(
-        """\
+BANNER = dedent(
+    """\
 
                 /######   /######            /##       /##  /######
                /##__  ## /##__  ##          |__/      | ## /##__  ##
@@ -22,7 +21,7 @@ def banner():
                \______/  \____ ### \______/ |__/ \_______/ \______/
                               \__/
     """
-    )
+)
 
 
 def parse_args():
@@ -53,19 +52,6 @@ def parse_args():
         type=str,
         required=True,
         help="Path to the application class something like package.module:app where app is an instance of squids.App",
-    )
-    parser.add_argument(
-        "--report-interval",
-        action="store",
-        type=int,
-        required=False,
-        default=300,
-        help=(
-            "How often to call the report_queue_stats callback with GetQueueAttributes for the queue in seconds. "
-            "Defaults to 300 (5min). If no report_queue_stats callback has been registered then GetQueueAttributes "
-            "will not be requested. The report-interval is an at earliest time. It may take longer depending on"
-            "the polling-wait-time."
-        ),
     )
     parser.add_argument(
         "--polling-wait-time",
@@ -127,22 +113,21 @@ def configure_logger(level):
 def run(args):
     configure_logger(args.log_level)
     app = import_app(args.app)
-    task_names = [n for n, t in app._tasks.items() if args.queue in t.queues]
+    task_names = [n for n in app._tasks]
 
-    print(banner())
+    print(BANNER)
     print(
         "[config]\n"
         f"  app = {app.name}\n"
         f"  queue = {args.queue}\n"
         f"  workers = {args.workers}\n"
-        f"  report-interval = {args.report_interval}\n"
         f"  polling-wait-time = {args.polling_wait_time}\n"
         f"  visibility-timeout = {args.visibility_timeout}\n"
         f"  log-level = {args.log_level}\n"
     )
 
     if not task_names:
-        print(f'No tasks registered for queue "{args.queue}"', file=sys.stderr)
+        print(f"No tasks registered", file=sys.stderr)
         return
 
     print("[tasks]")
@@ -154,9 +139,9 @@ def run(args):
         app,
         args.queue,
         args.workers,
-        args.report_interval,
         args.polling_wait_time,
         args.visibility_timeout,
+        partial(configure_logger, args.log_level),
     )
 
 

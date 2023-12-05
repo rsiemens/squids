@@ -1,28 +1,21 @@
 import random
 import time
 
-from squids import routing
 from squids.core import App, Task
 
 app = App("test", boto_config={"endpoint_url": "http://localhost:4566"})
 
 
-@app.report_queue_stats
-def reporter(queue: str, queue_stats: dict):
-    print(f"Queue stats for {queue}")
-    print(f"\tAvailable: {queue_stats['ApproximateNumberOfMessages']}")
-    print(f"\tDelayed: {queue_stats['ApproximateNumberOfMessagesDelayed']}")
-    print(f"\tIn flight: {queue_stats['ApproximateNumberOfMessagesNotVisible']}")
-
-
 @app.pre_send
 def before_send(queue: str, body: dict):
     print("Running before send hook")
+    print(queue, body)
 
 
 @app.post_send
 def after_send(queue: str, body: dict, response: dict):
     print("Running after send hook")
+    print(queue, body, response)
 
 
 @app.pre_task
@@ -74,18 +67,3 @@ def recursive_task(n):
     else:
         print(f"Running recursive task {n}")
         recursive_task.send(n - 1)
-
-
-@app.task(queue=["test", "special"], routing_strategy=routing.broadcast_strategy)
-def broadcast_task(msg):
-    print(msg)
-
-
-@app.task(queue=["test", "special", "other"])  # default random strategy
-def random_queue_task(msg):
-    print(msg)
-
-
-@app.task(queue=["test", "special", "other"], routing_strategy=routing.hash_strategy)
-def hash_queue_task(msg):
-    print(msg)
